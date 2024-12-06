@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     USE_CREDENTIALS: bool = True # Ensures email authentication is enabled.
     VALIDATE_CERTS: bool = True # Ensures email server certificates are validated
     DOMAIN: str
+    EMAIL_OTP_EXPIRE_MINUTES: int = 15
     
     model_config = SettingsConfigDict(
         env_file='.env',
