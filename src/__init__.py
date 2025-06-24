@@ -45,7 +45,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 admin = Admin(async_engine, title="Devsearch")
 
 # Add view
-admin.add_view(ModelView(User, icon="fas fa-user"))
+# admin.add_view(ModelView(User, icon="fas fa-user"))
 
 # Mount admin to your app
-admin.mount_to(app)
+# admin.mount_to(app)

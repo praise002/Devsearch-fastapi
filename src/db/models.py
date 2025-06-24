@@ -1,11 +1,10 @@
-from __future__ import annotations  # resolving forward reference issues
-
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from pydantic import EmailStr, model_validator
 from slugify import slugify
-from sqlalchemy import DateTime, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Integer, String, UniqueConstraint
 from sqlmodel import Column, Field, Relationship, SQLModel
 
 from src.config import Config
@@ -17,25 +16,34 @@ def get_utc_now():
 
 
 class User(SQLModel, table=True):
-    __tablename__ = "users"
+    __tablename__ = "user"
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     first_name: str = Field(max_length=50)
     last_name: str = Field(max_length=50)
-    username: str = Field(sa_column=Column(unique=True))
-    email: EmailStr = Field(sa_column=Column(String(50), unique=True))
+    username: str = Field(sa_column=Column(String(50), nullable=False, unique=True))
+    email: EmailStr = Field(sa_column=Column(String(50), nullable=False, unique=True))
     hashed_password: str = Field(exclude=True)
     is_active: bool = True
     is_email_verified: bool = False
     role: UserRole = Field(default=UserRole.user)
 
-    created_at: datetime = Field(default_factory=get_utc_now, index=True)
-    updated_at: datetime = Field(
+    created_at: datetime = Field(
         sa_column=Column(
-            DateTime(timezone=True), default=get_utc_now, onupdate=get_utc_now
+            DateTime(timezone=True), default=get_utc_now, nullable=False, index=True
         )
     )
-    otps: list["Otp"] = Relationship(back_populates="user", passive_deletes="all")
+    updated_at: datetime = Field(
+        sa_column=Column(
+            DateTime(timezone=True),
+            default=get_utc_now,
+            onupdate=get_utc_now,
+            nullable=False,
+        )
+    )
+    otps: list["Otp"] | None = Relationship(
+        back_populates="user", passive_deletes="all"
+    )
     profile: "Profile" = Relationship(back_populates="user", passive_deletes="all")
 
     @property
@@ -49,12 +57,14 @@ class User(SQLModel, table=True):
 class Otp(SQLModel, table=True):
     id: int = Field(sa_column=Column(Integer, primary_key=True, autoincrement=True))
     otp: int
-    created_at: datetime = Field(default_factory=get_utc_now)
-
-    user_id: uuid.UUID | None = Field(
-        default=None, foreign_key="users.id", ondelete="CASCADE"
+    created_at: datetime = Field(
+        sa_column=Column(
+            DateTime(timezone=True), default=get_utc_now, nullable=False, index=True
+        )
     )
-    user: User | None = Relationship(back_populates="otps")
+
+    user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
+    user: User = Relationship(back_populates="otps")
 
     @model_validator(mode="after")
     @property
@@ -75,12 +85,14 @@ class Skill(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     name: str = Field(max_length=100)
     description: str | None = None
-    created_at: datetime = Field(default_factory=get_utc_now)
-
-    profile_id: uuid.UUID | None = Field(
-        default=None, foreign_key="profile.id", ondelete="CASCADE"
+    created_at: datetime = Field(
+        sa_column=Column(
+            DateTime(timezone=True), default=get_utc_now, nullable=False, index=True
+        )
     )
-    profile: "Profile" | None = Relationship(back_populates="skills")
+
+    profile_id: uuid.UUID = Field(foreign_key="profile.id", ondelete="CASCADE")
+    profile: "Profile" = Relationship(back_populates="skills")
 
     def __str__(self):
         return self.name
@@ -88,7 +100,7 @@ class Skill(SQLModel, table=True):
 
 class Profile(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    user_id: uuid.UUID = Field(foreign_key="users.id", ondelete="CASCADE")
+    user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
     user: User = Relationship(back_populates="profile")
     short_intro: str = Field(default=None, max_length=200)
     bio: str | None = None
@@ -96,28 +108,37 @@ class Profile(SQLModel, table=True):
     avatar_url: str = Field(
         default="https://res.cloudinary.com/dq0ow9lxw/image/upload/v1732236186/default-image_foxagq.jpg"
     )  # TODO: have to upload to cloudinary
-    created_at: datetime = Field(default_factory=get_utc_now, index=True)
+    created_at: datetime = Field(
+        sa_column=Column(
+            DateTime(timezone=True), default=get_utc_now, nullable=False, index=True
+        )
+    )
     updated_at: datetime = Field(
         sa_column=Column(
-            DateTime(timezone=True), default=get_utc_now, onupdate=get_utc_now
+            DateTime(timezone=True),
+            default=get_utc_now,
+            onupdate=get_utc_now,
+            nullable=False,
         )
     )
 
     # Social Links
-    github: str = Field(default=None, max_length=200)
-    stack_overflow: str = Field(default=None, max_length=200)
-    tw: str = Field(default=None, max_length=200)
-    ln: str = Field(default=None, max_length=200)
-    website: str = Field(default=None, max_length=200)
+    github: str = Field(default=None, max_length=200, nullable=True)
+    stack_overflow: str = Field(default=None, max_length=200, nullable=True)
+    tw: str = Field(default=None, max_length=200, nullable=True)
+    ln: str = Field(default=None, max_length=200, nullable=True)
+    website: str = Field(default=None, max_length=200, nullable=True)
 
-    skills: list[Skill] = Relationship(back_populates="profile", passive_deletes="all")
+    skills: list[Skill] | None = Relationship(
+        back_populates="profile", passive_deletes="all"
+    )
 
-    reviews: list["Review"] = Relationship(
+    reviews: list["Review"] | None = Relationship(
         back_populates="profile", passive_deletes="all"
     )
 
     messages: list["Message"] | None = Relationship(
-        back_populates="messages", passive_deletes="all"
+        back_populates="recipient", passive_deletes="all"
     )
 
     projects: list["Project"] | None = Relationship(
@@ -133,11 +154,16 @@ class Message(SQLModel, table=True):
     recipient_id: uuid.UUID = Field(foreign_key="profile.id", ondelete="CASCADE")
     recipient: Profile = Relationship(back_populates="messages")
     name: str = Field(max_length=200)
-    email: EmailStr
+    email: EmailStr = Field(max_length=50)
     subject: str = Field(max_length=200)
     body: str
     is_read: bool = False
-    created_at: datetime = Field(default_factory=get_utc_now, index=True)
+    
+    created_at: datetime = Field(
+        sa_column=Column(
+            DateTime(timezone=True), default=get_utc_now, nullable=False, index=True
+        )
+    )
 
     def __str__(self):
         return self.subject
@@ -146,7 +172,11 @@ class Message(SQLModel, table=True):
 class Tag(SQLModel, table=True):
     id: uuid.UUID = Field(primary_key=True, default_factory=uuid.uuid4)
     name: str = Field(max_length=50)
-    created_at: datetime = Field(default_factory=get_utc_now, index=True)
+    created_at: datetime = Field(
+        sa_column=Column(
+            DateTime(timezone=True), default=get_utc_now, nullable=False, index=True
+        )
+    )
 
     projects: list["Project"] | None = Relationship(back_populates="tags")
     project_id: uuid.UUID = Field(foreign_key="project.id", ondelete="CASCADE")
@@ -167,7 +197,10 @@ class Project(SQLModel, table=True):
     vote_ratio: int = Field(default=0)
     updated_at: datetime = Field(
         sa_column=Column(
-            DateTime(timezone=True), default=get_utc_now, onupdate=get_utc_now
+            DateTime(timezone=True),
+            default=get_utc_now,
+            onupdate=get_utc_now,
+            nullable=False,
         )
     )
 
@@ -191,4 +224,8 @@ class Review(SQLModel, table=True):
     profile_id: uuid.UUID = Field(foreign_key="profile.id", ondelete="CASCADE")
     value: VoteType
     content: str
-    created_at: datetime = Field(default_factory=get_utc_now, index=True)
+    created_at: datetime = Field(
+        sa_column=Column(
+            DateTime(timezone=True), default=get_utc_now, nullable=False, index=True
+        )
+    )
