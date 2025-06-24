@@ -1,63 +1,78 @@
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
-import uuid
-from datetime import datetime
+from typing import Self
 
-class UserCreateModel(BaseModel):
-    first_name: str = Field(max_length=25)
-    last_name: str = Field(max_length=25)
-    email: str = Field(max_length=40)
-    password: str = Field(min_length=6)
-    
-    @model_validator(mode="before")
-    def check_names(cls, values):
-        first_name = values.get("first_name")
-        last_name = values.get("last_name")
-        
-        if len(first_name.split()) > 1:
+from pydantic import (  
+    BaseModel,
+    EmailStr,
+    Field,
+    model_validator,
+)
+
+
+
+class UserBase(BaseModel):
+    first_name: str = Field(max_length=50)
+    last_name: str = Field(max_length=50)
+    username: str   # NOTE: SHOULD NEVER CHANGE and be unique
+    email: EmailStr
+
+    @model_validator(mode="after")
+    def validate(self) -> Self:
+        if len(self.first_name.split()) > 1 or len(self.last_name.split()) > 1:
             raise ValueError("No spacing allowed")
-        
-        if len(last_name.split()) > 1:
-            raise ValueError("No spacing allowed")
-        
-        return values
-    
-class UserModel(BaseModel):
-    uid: uuid.UUID 
-    username: str
-    email: str
-    first_name: str
-    last_name: str
-    is_verified: bool 
-    is_active: bool 
-    password_hash: str = Field(exclude=True)
-    created_at: datetime 
-    updated_at: datetime  
-    
+
+        return self
+
+
+class UserInDB(UserBase):
+    hashed_password: str
+
+
+class UserCreate(UserBase):
+    password: str | None = None
+
+
+class UserUpdate(BaseModel):
+    first_name: str = Field(default=None, max_length=50)
+    last_name: str = Field(default=None, max_length=50)
+
+
+class UserResponse(UserBase):
+    pass
+
+
 class UserLoginModel(BaseModel):
-    email: EmailStr = Field(max_length=40)
+    email: EmailStr
     password: str = Field(min_length=6)
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    username: str | None = None
     
 class PasswordResetModel(BaseModel):
     email: EmailStr
-    
+
+
 class PasswordResetConfirmModel(BaseModel):
     new_password: str
     confirm_new_password: str
-    
-    @field_validator("confirm_new_password")
-    def passwords_match(cls, value, values):
-        if "new_password" in values and value != values["new_password"]:
-            raise ValueError("Passwords do not match")
-        return value
 
-    
+    @model_validator(mode="after")
+    def check_passwords_match(self) -> Self:
+        if self.new_password != self.confirm_new_password:
+            raise ValueError("Password does not match")
+        return self
+
+
 class PasswordChangeModel(BaseModel):
     old_password: str
     new_password: str
     confirm_new_password: str
-    
-    @field_validator("confirm_new_password")
-    def passwords_match(cls, value, values):
-        if "new_password" in values and value != values["new_password"]:
-            raise ValueError("Passwords do not match")
-        return value
+
+    @model_validator(mode="after")
+    def check_passwords_match(self) -> Self:
+        if self.new_password != self.confirm_new_password:
+            raise ValueError("Password does not match")
+        return self

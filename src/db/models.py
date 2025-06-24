@@ -1,63 +1,194 @@
-from typing import List, Optional
-from pydantic import EmailStr
-import sqlalchemy.dialects.postgresql as pg
-from sqlmodel import SQLModel, Field, Column, Relationship
-from datetime import datetime, timedelta
-from slugify import slugify
+from __future__ import annotations  # resolving forward reference issues
+
 import uuid
+from datetime import datetime, timedelta, timezone
 
-from src.config import Settings
+from pydantic import EmailStr, model_validator
+from slugify import slugify
+from sqlalchemy import DateTime, Integer, String, UniqueConstraint
+from sqlmodel import Column, Field, Relationship, SQLModel
 
-s = Settings()
+from src.config import Config
+from src.constants import UserRole, VoteType
+
+
+def get_utc_now():
+    return datetime.now(timezone.utc)
+
 
 class User(SQLModel, table=True):
     __tablename__ = "users"
-    
-    uid: uuid.UUID = Field(
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    first_name: str = Field(max_length=50)
+    last_name: str = Field(max_length=50)
+    username: str = Field(sa_column=Column(unique=True))
+    email: EmailStr = Field(sa_column=Column(String(50), unique=True))
+    hashed_password: str = Field(exclude=True)
+    is_active: bool = True
+    is_email_verified: bool = False
+    role: UserRole = Field(default=UserRole.user)
+
+    created_at: datetime = Field(default_factory=get_utc_now, index=True)
+    updated_at: datetime = Field(
         sa_column=Column(
-            pg.UUID,
-            nullable=False,
-            primary_key=True,
-            default=uuid.uuid4,
-            index=True,
+            DateTime(timezone=True), default=get_utc_now, onupdate=get_utc_now
         )
     )
-    username: str = Field(default="", nullable=False)
-    email: EmailStr
-    first_name: str
-    last_name: str
-    is_verified: bool = False
-    is_active: bool = True
-    password_hash: str = Field(exclude=True) # prevents it from being included in serialized outputs
-    created_at: datetime = Field(sa_column=Column(pg.TIMESTAMP, default=datetime.now, index=True))
-    updated_at: datetime = Field(sa_column=Column(pg.TIMESTAMP, default=datetime.now))
-    otps: List["Otp"] = Relationship(back_populates="user")  # Establish relationship
-    
-    def generate_slug(self):
-        self.username = slugify(f"{self.first_name}-{self.last_name}")
-        
-    def __repr__(self): # Provides a developer-friendly string representation of a User instance
-        return f'<User {self.username}>'
+    otps: list["Otp"] = Relationship(back_populates="user", passive_deletes="all")
+    profile: "Profile" = Relationship(back_populates="user", passive_deletes="all")
+
+    @property
+    def full_name(self):
+        return f"{self.first_name} {self.last_name}"
+
+    def __str__(self):
+        return self.full_name
 
 
 class Otp(SQLModel, table=True):
-    id: int = Field(
-        primary_key=True,
-        sa_column=Column(pg.INTEGER, autoincrement=True),
-        index=True,
+    id: int = Field(sa_column=Column(Integer, primary_key=True, autoincrement=True))
+    otp: int
+    created_at: datetime = Field(default_factory=get_utc_now)
+
+    user_id: uuid.UUID | None = Field(
+        default=None, foreign_key="users.id", ondelete="CASCADE"
     )
-    user_uid: uuid.UUID = Field(nullable=False, foreign_key='users.uid')
-    otp: int 
-    created_at: datetime = Field(sa_column=Column(pg.TIMESTAMP, default=datetime.now))
-    user: Optional[User] = Relationship(back_populates="otps")  # Establish relationship
-    
+    user: User | None = Relationship(back_populates="otps")
+
+    @model_validator(mode="after")
     @property
     def is_valid(self) -> bool:
         """
         Check if the OTP is still valid based on expiration settings.
         """
-        expiration_time = self.created_at + timedelta(minutes=s.EMAIL_OTP_EXPIRE_MINUTES)
-        return datetime.now() < expiration_time
-    
-    def __repr__(self): 
-        return f'<Otp {self.otp}>'
+        expiration_time = self.created_at + timedelta(
+            minutes=Config.EMAIL_OTP_EXPIRE_MINUTES
+        )
+        return timezone.now() < expiration_time
+
+    def __str__(self):
+        return self.otp
+
+
+class Skill(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    name: str = Field(max_length=100)
+    description: str | None = None
+    created_at: datetime = Field(default_factory=get_utc_now)
+
+    profile_id: uuid.UUID | None = Field(
+        default=None, foreign_key="profile.id", ondelete="CASCADE"
+    )
+    profile: "Profile" | None = Relationship(back_populates="skills")
+
+    def __str__(self):
+        return self.name
+
+
+class Profile(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(foreign_key="users.id", ondelete="CASCADE")
+    user: User = Relationship(back_populates="profile")
+    short_intro: str = Field(default=None, max_length=200)
+    bio: str | None = None
+    location: str = Field(default=None, max_length=100)
+    avatar_url: str = Field(
+        default="https://res.cloudinary.com/dq0ow9lxw/image/upload/v1732236186/default-image_foxagq.jpg"
+    )  # TODO: have to upload to cloudinary
+    created_at: datetime = Field(default_factory=get_utc_now, index=True)
+    updated_at: datetime = Field(
+        sa_column=Column(
+            DateTime(timezone=True), default=get_utc_now, onupdate=get_utc_now
+        )
+    )
+
+    # Social Links
+    github: str = Field(default=None, max_length=200)
+    stack_overflow: str = Field(default=None, max_length=200)
+    tw: str = Field(default=None, max_length=200)
+    ln: str = Field(default=None, max_length=200)
+    website: str = Field(default=None, max_length=200)
+
+    skills: list[Skill] = Relationship(back_populates="profile", passive_deletes="all")
+
+    reviews: list["Review"] = Relationship(
+        back_populates="profile", passive_deletes="all"
+    )
+
+    messages: list["Message"] | None = Relationship(
+        back_populates="messages", passive_deletes="all"
+    )
+
+    projects: list["Project"] | None = Relationship(
+        back_populates="owner", passive_deletes="all"
+    )
+
+    def __str__(self):
+        return self.user.full_name
+
+
+class Message(SQLModel, table=True):
+    id: uuid.UUID = Field(primary_key=True, default_factory=uuid.uuid4)
+    recipient_id: uuid.UUID = Field(foreign_key="profile.id", ondelete="CASCADE")
+    recipient: Profile = Relationship(back_populates="messages")
+    name: str = Field(max_length=200)
+    email: EmailStr
+    subject: str = Field(max_length=200)
+    body: str
+    is_read: bool = False
+    created_at: datetime = Field(default_factory=get_utc_now, index=True)
+
+    def __str__(self):
+        return self.subject
+
+
+class Tag(SQLModel, table=True):
+    id: uuid.UUID = Field(primary_key=True, default_factory=uuid.uuid4)
+    name: str = Field(max_length=50)
+    created_at: datetime = Field(default_factory=get_utc_now, index=True)
+
+    projects: list["Project"] | None = Relationship(back_populates="tags")
+    project_id: uuid.UUID = Field(foreign_key="project.id", ondelete="CASCADE")
+
+
+class Project(SQLModel, table=True):
+    id: uuid.UUID = Field(primary_key=True, default_factory=uuid.uuid4)
+    title: str = Field(index=True, max_length=255)
+
+    slug: str = Field(default_factory=lambda self: slugify(self.title))
+    owner: Profile = Relationship(back_populates="projects")
+    owner_id: uuid.UUID = Field(foreign_key="profile.id", ondelete="CASCADE")
+    featured_image: str
+    description: str = Field(index=True)
+    source_link: str = Field(default=None, max_length=200)
+    demo_link: str = Field(default=None, max_length=200)
+    vote_total: int = Field(default=0)
+    vote_ratio: int = Field(default=0)
+    updated_at: datetime = Field(
+        sa_column=Column(
+            DateTime(timezone=True), default=get_utc_now, onupdate=get_utc_now
+        )
+    )
+
+    tags: list[Tag] | None = Relationship(
+        back_populates="projects", passive_deletes="all"
+    )
+    reviews: list["Review"] | None = Relationship(
+        back_populates="project", passive_deletes="all"
+    )
+
+
+class Review(SQLModel, table=True):
+    __table_args__ = (
+        UniqueConstraint("profile_id", "project_id", name="uq_profile_project_review"),
+    )
+
+    id: uuid.UUID = Field(primary_key=True, default_factory=uuid.uuid4)
+    project: Project = Relationship(back_populates="reviews")
+    project_id: uuid.UUID = Field(foreign_key="project.id", ondelete="CASCADE")
+    profile: Profile = Relationship(back_populates="reviews")
+    profile_id: uuid.UUID = Field(foreign_key="profile.id", ondelete="CASCADE")
+    value: VoteType
+    content: str
+    created_at: datetime = Field(default_factory=get_utc_now, index=True)
