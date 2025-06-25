@@ -1,10 +1,9 @@
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 from pydantic import EmailStr, model_validator
 from slugify import slugify
-from sqlalchemy import Boolean, DateTime, Integer, String, UniqueConstraint
+from sqlalchemy import DateTime, Integer, String, UniqueConstraint
 from sqlmodel import Column, Field, Relationship, SQLModel
 
 from src.config import Config
@@ -158,7 +157,7 @@ class Message(SQLModel, table=True):
     subject: str = Field(max_length=200)
     body: str
     is_read: bool = False
-    
+
     created_at: datetime = Field(
         sa_column=Column(
             DateTime(timezone=True), default=get_utc_now, nullable=False, index=True

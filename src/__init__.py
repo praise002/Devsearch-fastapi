@@ -3,6 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette_admin.contrib.sqla import Admin, ModelView
 
+from src.auth.routes import router as auth_router
 from src.db.main import async_engine
 from src.db.models import User
 
@@ -49,3 +50,10 @@ admin = Admin(async_engine, title="Devsearch")
 
 # Mount admin to your app
 # admin.mount_to(app)
+
+app.include_router(auth_router, prefix=f"/api/{version}/auth", tags=["auth"])
+
+
+@app.get("/")
+async def root():
+    return {"message": "Welcome to DevSearch API"}
