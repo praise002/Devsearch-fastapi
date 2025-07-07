@@ -15,7 +15,7 @@ def get_utc_now():
 
 
 class User(SQLModel, table=True):
-    __tablename__ = "user"
+    # __tablename__ = "user"
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     first_name: str = Field(max_length=50)
@@ -49,7 +49,7 @@ class User(SQLModel, table=True):
     def full_name(self):
         return f"{self.first_name} {self.last_name}"
 
-    def __str__(self):
+    def __repr__(self):
         return self.full_name
 
 
@@ -93,7 +93,7 @@ class Skill(SQLModel, table=True):
     profile_id: uuid.UUID = Field(foreign_key="profile.id", ondelete="CASCADE")
     profile: "Profile" = Relationship(back_populates="skills")
 
-    def __str__(self):
+    def __repr__(self):
         return self.name
 
 
@@ -144,7 +144,7 @@ class Profile(SQLModel, table=True):
         back_populates="owner", passive_deletes="all"
     )
 
-    def __str__(self):
+    def __repr__(self):
         return self.user.full_name
 
 
@@ -164,7 +164,7 @@ class Message(SQLModel, table=True):
         )
     )
 
-    def __str__(self):
+    def __repr__(self):
         return self.subject
 
 
