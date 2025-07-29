@@ -6,6 +6,7 @@ from starlette_admin.contrib.sqla import Admin, ModelView
 from src.auth.routes import router as auth_router
 from src.db.main import async_engine
 from src.db.models import User
+from src.errors import register_all_errors
 
 description = """
 ## Overview
@@ -35,7 +36,10 @@ app = FastAPI(
         "name": "Devsearch admin",
         "email": "praizthecoder@gmail.com",
     },
+    # lifespan=life_span
 )
+
+register_all_errors(app)
 
 templates = Jinja2Templates(directory="templates")
 

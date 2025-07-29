@@ -32,12 +32,18 @@ ureqn:
 alembic_init:
 	alembic init app/db/migrations
 
+# mmig: 
+# 	if [ -z "$(message)" ]; then \
+# 		alembic revision --autogenerate; \
+# 	else \
+# 		alembic revision --autogenerate -m "$(message)"; \
+# 	fi
+
 mmig: 
-	if [ -z "$(message)" ]; then \
-		alembic revision --autogenerate; \
-	else \
-		alembic revision --autogenerate -m "$(message)"; \
-	fi
+	alembic revision --autogenerate -m "$(message)"
+
+mmig-auto:
+	alembic revision --autogenerate
 	
 mig:
 	alembic upgrade heads

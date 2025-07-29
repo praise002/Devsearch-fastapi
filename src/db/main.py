@@ -1,5 +1,6 @@
 from typing import AsyncGenerator
 
+from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, create_engine
@@ -24,3 +25,13 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
     async with Session() as session:
         yield session
+
+from contextlib import asynccontextmanager
+
+# TODO: REMOVE LATER 
+@asynccontextmanager
+async def life_span(app: FastAPI):
+    await init_db()
+    print("Server is starting...")
+    yield
+    print("Server has been stopped...")

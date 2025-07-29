@@ -192,6 +192,11 @@ src/
 - `GET /api/v1/messages/{id}` - Get message
 - `PUT /api/v1/messages/{id}` - Mark as read
 
+
+## Resources
+- [How to send an email in fastapi](https://medium.com/nerd-for-tech/how-to-send-email-using-python-fastapi-947921059f0c)
+- [Fastapi mail](https://sabuhish.github.io/fastapi-mail/example/#using-jinja2-html-templates)
+
 ## 🤝 Contributing
 
 This project is currently in active development. Contributions, issues, and feature requests are welcome!

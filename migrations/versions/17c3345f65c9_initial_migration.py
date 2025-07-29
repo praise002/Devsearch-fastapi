@@ -1,8 +1,8 @@
-"""Initial migration
+"""initial migration
 
-Revision ID: 31a4d5066182
+Revision ID: 17c3345f65c9
 Revises: 
-Create Date: 2025-06-24 13:27:22.606259
+Create Date: 2025-07-14 12:58:18.687005
 
 """
 from typing import Sequence, Union
@@ -13,7 +13,7 @@ import sqlmodel  # NEW
 
 
 # revision identifiers, used by Alembic.
-revision: str = '31a4d5066182'
+revision: str = '17c3345f65c9'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -31,31 +31,29 @@ def upgrade() -> None:
     sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.Column('is_email_verified', sa.Boolean(), nullable=False),
     sa.Column('role', sa.Enum('user', 'admin', name='userrole'), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('email'),
     sa.UniqueConstraint('username')
     )
-    op.create_index(op.f('ix_user_created_at'), 'user', ['created_at'], unique=False)
     op.create_table('otp',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('otp', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('user_id', sa.Uuid(), nullable=False),
     sa.ForeignKeyConstraint(['user_id'], ['user.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_otp_created_at'), 'otp', ['created_at'], unique=False)
     op.create_table('profile',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('user_id', sa.Uuid(), nullable=False),
-    sa.Column('short_intro', sqlmodel.sql.sqltypes.AutoString(length=200), nullable=False),
+    sa.Column('short_intro', sqlmodel.sql.sqltypes.AutoString(length=200), nullable=True),
     sa.Column('bio', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('location', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False),
-    sa.Column('avatar_url', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('location', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),
+    sa.Column('avatar_url', sqlmodel.sql.sqltypes.AutoString(length=200), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('github', sqlmodel.sql.sqltypes.AutoString(length=200), nullable=True),
     sa.Column('stack_overflow', sqlmodel.sql.sqltypes.AutoString(length=200), nullable=True),
     sa.Column('tw', sqlmodel.sql.sqltypes.AutoString(length=200), nullable=True),
@@ -64,7 +62,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['user.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_profile_created_at'), 'profile', ['created_at'], unique=False)
     op.create_table('message',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('recipient_id', sa.Uuid(), nullable=False),
@@ -73,11 +70,10 @@ def upgrade() -> None:
     sa.Column('subject', sqlmodel.sql.sqltypes.AutoString(length=200), nullable=False),
     sa.Column('body', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('is_read', sa.Boolean(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['recipient_id'], ['profile.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_message_created_at'), 'message', ['created_at'], unique=False)
     op.create_table('project',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('title', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False),
@@ -89,7 +85,7 @@ def upgrade() -> None:
     sa.Column('demo_link', sqlmodel.sql.sqltypes.AutoString(length=200), nullable=False),
     sa.Column('vote_total', sa.Integer(), nullable=False),
     sa.Column('vote_ratio', sa.Integer(), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['owner_id'], ['profile.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
@@ -99,54 +95,44 @@ def upgrade() -> None:
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('name', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False),
     sa.Column('description', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('profile_id', sa.Uuid(), nullable=False),
     sa.ForeignKeyConstraint(['profile_id'], ['profile.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_skill_created_at'), 'skill', ['created_at'], unique=False)
     op.create_table('review',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('project_id', sa.Uuid(), nullable=False),
     sa.Column('profile_id', sa.Uuid(), nullable=False),
     sa.Column('value', sa.Enum('up', 'down', name='votetype'), nullable=False),
     sa.Column('content', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['profile_id'], ['profile.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['project_id'], ['project.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('profile_id', 'project_id', name='uq_profile_project_review')
     )
-    op.create_index(op.f('ix_review_created_at'), 'review', ['created_at'], unique=False)
     op.create_table('tag',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('name', sqlmodel.sql.sqltypes.AutoString(length=50), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('project_id', sa.Uuid(), nullable=False),
     sa.ForeignKeyConstraint(['project_id'], ['project.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_tag_created_at'), 'tag', ['created_at'], unique=False)
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     # ### commands auto generated by Alembic - please adjust! ###
-    op.drop_index(op.f('ix_tag_created_at'), table_name='tag')
     op.drop_table('tag')
-    op.drop_index(op.f('ix_review_created_at'), table_name='review')
     op.drop_table('review')
-    op.drop_index(op.f('ix_skill_created_at'), table_name='skill')
     op.drop_table('skill')
     op.drop_index(op.f('ix_project_title'), table_name='project')
     op.drop_index(op.f('ix_project_description'), table_name='project')
     op.drop_table('project')
-    op.drop_index(op.f('ix_message_created_at'), table_name='message')
     op.drop_table('message')
-    op.drop_index(op.f('ix_profile_created_at'), table_name='profile')
     op.drop_table('profile')
-    op.drop_index(op.f('ix_otp_created_at'), table_name='otp')
     op.drop_table('otp')
-    op.drop_index(op.f('ix_user_created_at'), table_name='user')
     op.drop_table('user')
     # ### end Alembic commands ###
