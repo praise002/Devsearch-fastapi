@@ -37,6 +37,10 @@ class OtpVerify(BaseModel):
         return value
 
 
+class SendOtp(BaseModel):
+    email: EmailStr
+
+
 class UserUpdate(BaseModel):
     first_name: str | None = Field(default=None, max_length=50)
     last_name: str | None = Field(default=None, max_length=50)

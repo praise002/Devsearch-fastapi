@@ -1,5 +1,8 @@
+from datetime import timedelta
+
 from fastapi import APIRouter, BackgroundTasks, Depends, status
 from fastapi.exceptions import HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -15,12 +18,22 @@ from src.auth.schemas import (
     PasswordResetConfirmModel,
     PasswordResetModel,
     PasswordResetVerifyOtpModel,
+    SendOtp,
     UserCreate,
     UserLoginModel,
     UserResponse,
 )
 from src.auth.service import UserService
-from src.auth.utils import generate_otp, hash_password, invalidate_previous_otps
+from src.auth.utils import (
+    ACCESS_TOKEN_EXAMPLE,
+    REFRESH_TOKEN_EXAMPLE,
+    create_access_token,
+    generate_otp,
+    hash_password,
+    invalidate_previous_otps,
+    verify_password,
+)
+from src.config import Config
 from src.db.main import get_session
 from src.db.models import Profile, User
 from src.errors import InvalidOtp, UserNotFound
@@ -30,6 +43,7 @@ router = APIRouter()
 
 user_service = UserService()
 role_checker = RoleChecker(["admin", "user"])
+REFRESH_TOKEN = Config.REFRESH_TOKEN_EXPIRY
 
 
 @router.post(
@@ -87,13 +101,27 @@ async def create_user_account(
     }
 
 
-@router.get("/verification/verify", status_code=status.HTTP_200_OK)
+@router.get(
+    "/verification/verify",
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Email verified successfully",
+                    }
+                }
+            },
+        }
+    },
+)
 async def verify_user_account(
     data: OtpVerify,
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
 ):
-    # get the email and otp
+
     email = data.email
     otp = data.otp
 
@@ -130,21 +158,117 @@ async def verify_user_account(
     }
 
 
-@router.get("/verification")
+@router.get(
+    "/verification",
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "OTP sent successfully",
+                    }
+                }
+            },
+        }
+    },
+)
 async def resend_verification_email(
-    token: str, session: AsyncSession = Depends(get_session)
+    data: SendOtp,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
 ):
-    pass
+    email = data.email
+    user = await user_service.get_user_by_email(email, session)
+
+    if not user:
+        raise UserNotFound()
+
+    if user.is_email_verified:
+        return {
+            "message": "Email address already verified. No OTP sent",
+        }
+
+    invalidate_previous_otps(user, session)
+
+    send_email(
+        background_tasks,
+        "Verify your email",
+        user.email,
+        {"name": user.first_name},
+        "welcome_message",
+    )
+
+    return {
+        "message": "OTP sent successfully",
+    }
 
 
-str
-
-
-@router.get("/token")
+@router.get(
+    "/token",
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Login successful",
+                        "access_token": ACCESS_TOKEN_EXAMPLE,
+                        "refresh_token": REFRESH_TOKEN_EXAMPLE,
+                    }
+                }
+            },
+        }
+    },
+)
 async def login_user(
     login_data: UserLoginModel, session: AsyncSession = Depends(get_session)
 ):
-    pass
+    email = login_data.email
+    password = login_data.password
+
+    user = await user_service.get_user_by_email(email, session)
+
+    if user is not None:
+
+        if not user.is_email_verified:
+            return JSONResponse(
+                content={
+                    "message": "Email not verified. Please verify your email before logging in"
+                },
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not user.is_active:
+            return JSONResponse(
+                content={
+                    "message": "Your account has been disabled. Please contact support for assistance"
+                },
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+
+        password_valid = verify_password(password, user.password_hash)
+        if password_valid:
+            access_token = create_access_token(
+                user_data={
+                    "email": user.email,
+                    "user_id": str(user.id),
+                    "role": user.role,
+                }
+            )
+            refresh_token = create_access_token(
+                user_data={
+                    "email": user.email,
+                    "user_id": str(user.id),
+                },
+                refresh=True,
+                expiry=timedelta(days=90),
+            )
+            return {
+                "message": "Login successful",
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+            }  # TODO: USE HTTP-COOKIE LATER
 
 
 @router.get("/token/refresh")

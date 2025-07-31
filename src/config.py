@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRY: int
+    REFRESH_TOKEN_EXPIRY: int
     DATABASE_URL: str
     JWT_SECRET: str
     JWT_ALGORITHM: str
