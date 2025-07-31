@@ -1,6 +1,6 @@
-from typing import Any, Self
+from typing import Self
 
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 class UserBase(BaseModel):
@@ -23,6 +23,18 @@ class UserInDB(UserBase):
 
 class UserCreate(UserBase):
     password: str | None = None
+
+
+class OtpVerify(BaseModel):
+    email: EmailStr
+    otp: int
+
+    @field_validator("otp", mode="after")
+    @classmethod
+    def check_otp_digits(cls, value: int) -> str:
+        if not (100000 <= value <= 999999):
+            raise ValueError("OTP must be a 6-digit number")
+        return value
 
 
 class UserUpdate(BaseModel):

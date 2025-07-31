@@ -1,7 +1,6 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, status
 from fastapi.exceptions import HTTPException
-from fastapi_mail import FastMail, MessageSchema, MessageType
-
+from pydantic import ValidationError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.auth.dependencies import (
@@ -11,6 +10,7 @@ from src.auth.dependencies import (
     get_current_user,
 )
 from src.auth.schemas import (
+    OtpVerify,
     PasswordChangeModel,
     PasswordResetConfirmModel,
     PasswordResetModel,
@@ -20,35 +20,16 @@ from src.auth.schemas import (
     UserResponse,
 )
 from src.auth.service import UserService
-from src.auth.utils import generate_otp, hash_password
-from src.config import conf
+from src.auth.utils import generate_otp, hash_password, invalidate_previous_otps
 from src.db.main import get_session
 from src.db.models import Profile, User
+from src.errors import InvalidOtp, UserNotFound
+from src.mail import send_email
 
 router = APIRouter()
 
 user_service = UserService()
 role_checker = RoleChecker(["admin", "user"])
-
-
-def send_email(
-    background_tasks: BackgroundTasks,
-    subject: str,
-    email_to: str,
-    template_context: dict,
-):
-    message = MessageSchema(
-        subject=subject,
-        recipients=[email_to],
-        template_body=template_context,
-        subtype=MessageType.html,
-    )
-    fm = FastMail(conf)
-    background_tasks.add_task(
-        fm.send_message,
-        message,
-        template_name="verify_email_request.html",
-    )
 
 
 @router.post(
@@ -66,6 +47,15 @@ async def create_user_account(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="User with email already exists.",
         )
+
+    username = user_data.username
+    username_exists = await user_service.username_exists(username, session)
+    if username_exists:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="User with username already exists.",
+        )
+
     hashed_password = hash_password(user_data.password)
     extra_data = {
         "hashed_password": hashed_password,
@@ -88,6 +78,7 @@ async def create_user_account(
         "Verify your email",
         new_user.email,
         {"name": new_user.first_name, "otp": str(otp)},
+        "verify_email_request.html",
     )
 
     return {
@@ -96,9 +87,47 @@ async def create_user_account(
     }
 
 
-@router.get("/verification/verify")
-async def verify_user_account(token: str, session: AsyncSession = Depends(get_session)):
-    pass
+@router.get("/verification/verify", status_code=status.HTTP_200_OK)
+async def verify_user_account(
+    data: OtpVerify,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
+):
+    # get the email and otp
+    email = data.email
+    otp = data.otp
+
+    user = await user_service.get_user_by_email(email, session)
+
+    if not user:
+        raise UserNotFound()
+
+    otp_record = await user_service.get_otp_by_user(user_id, otp, session)
+    user_id = user.id
+
+    if not otp_record or not otp_record.is_valid:
+        raise InvalidOtp()
+
+    if user.is_email_verified:
+        return {
+            "message": "Email address already verified. No OTP sent",
+        }
+
+    user_service.update_user(user, {"is_email_verified": True}, session)
+    # Clear OTP after verification
+    invalidate_previous_otps(user, session)
+
+    send_email(
+        background_tasks,
+        "Verify your email",
+        user.email,
+        {"name": user.first_name},
+        "welcome_message",
+    )
+
+    return {
+        "message": "Email verified successfully",
+    }
 
 
 @router.get("/verification")

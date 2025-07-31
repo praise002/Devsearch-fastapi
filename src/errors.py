@@ -47,7 +47,7 @@ def register_all_errors(app: FastAPI):
             },
         ),
     )
-    
+
     app.add_exception_handler(
         InvalidToken,
         create_exception_handler(
@@ -120,7 +120,7 @@ def register_all_errors(app: FastAPI):
         ),
     )
 
-    @app.add_exception_handler(500)
+    @app.exception_handler(500)
     async def internal_server_error(request, exc):
         return JSONResponse(
             content={
@@ -141,6 +141,7 @@ class InvalidOtp(BaseException):
     """User has provided an invalid or expired otp"""
 
     pass
+
 
 class InvalidToken(BaseException):
     """User has provided an invalid or expired token"""
