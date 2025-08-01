@@ -1,7 +1,6 @@
-from decouple import config
+from typing import ClassVar
 
 from fastapi_mail import ConnectionConfig
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,6 +8,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRY: int
     REFRESH_TOKEN_EXPIRY: int
     DATABASE_URL: str
+    REDIS_URL: ClassVar[str] = "redis://localhost:6379/0"
     JWT_SECRET: str
     JWT_ALGORITHM: str
     MAIL_USERNAME: str
@@ -26,22 +26,23 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+
 Config = Settings()
 
+broker_url = Config.REDIS_URL
+result_backend = Config.REDIS_URL
+broker_connection_retry_on_startup = True
+
 conf = ConnectionConfig(
-    MAIL_USERNAME = Config.MAIL_USERNAME,
-    MAIL_PASSWORD = Config.MAIL_PASSWORD,
-    MAIL_FROM = Config.MAIL_FROM,
-    MAIL_PORT = Config.MAIL_PORT,
-    MAIL_SERVER = Config.MAIL_SERVER,
+    MAIL_USERNAME=Config.MAIL_USERNAME,
+    MAIL_PASSWORD=Config.MAIL_PASSWORD,
+    MAIL_FROM=Config.MAIL_FROM,
+    MAIL_PORT=Config.MAIL_PORT,
+    MAIL_SERVER=Config.MAIL_SERVER,
     MAIL_FROM_NAME=Config.MAIL_FROM_NAME,
-    MAIL_STARTTLS = Config.MAIL_STARTTLS,
-    MAIL_SSL_TLS = Config.MAIL_SSL_TLS,
-    USE_CREDENTIALS = Config.USE_CREDENTIALS,
-    VALIDATE_CERTS = Config.VALIDATE_CERTS,
-    TEMPLATE_FOLDER = "templates"
+    MAIL_STARTTLS=Config.MAIL_STARTTLS,
+    MAIL_SSL_TLS=Config.MAIL_SSL_TLS,
+    USE_CREDENTIALS=Config.USE_CREDENTIALS,
+    VALIDATE_CERTS=Config.VALIDATE_CERTS,
+    TEMPLATE_FOLDER="templates",
 )
- 
-
-
-

@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, status
 from fastapi.exceptions import HTTPException
@@ -36,7 +36,8 @@ from src.auth.utils import (
 from src.config import Config
 from src.db.main import get_session
 from src.db.models import Profile, User
-from src.errors import InvalidOtp, UserNotFound
+from src.db.redis import add_jti_to_blocklist
+from src.errors import InvalidOtp, InvalidToken, UserNotFound
 from src.mail import send_email
 
 router = APIRouter()
@@ -271,21 +272,62 @@ async def login_user(
             }  # TODO: USE HTTP-COOKIE LATER
 
 
-@router.get("/token/refresh")
-async def get_new_access_token(token_details: dict = Depends(RefreshTokenBearer)):
-    pass
+@router.get(
+    "/token/refresh",
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Token refreshed successfully",
+                        "access_token": ACCESS_TOKEN_EXAMPLE,
+                    }
+                }
+            },
+        }
+    },
+)
+async def get_new_access_token(token_details: dict = Depends(RefreshTokenBearer())):
+    expiry_timestamp = token_details["exp"]
+
+    if datetime.fromtimestamp(expiry_timestamp) > datetime.now():
+        new_access_token = create_access_token(user_data=token_details["user"])
+        return {
+            "message": "Token refreshed successfully",
+            "access_token": new_access_token,
+        }
+
+    raise InvalidToken()
 
 
-@router.get("/me")
+# TODO: PUT THE RESPONSE MODEL LATER
+@router.get("/me", status_code=status.HTTP_200_OK, response_model="")
 async def get_current_user(
     user=Depends(get_current_user), _: bool = Depends(role_checker)
 ):
-    pass
+    return user
 
 
-@router.get("/logout")
-async def revoke_token(token_details: dict = Depends(AccessTokenBearer())):
-    pass
+@router.get(
+    "/logout",
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "TLogged Out successfully",
+                    }
+                }
+            },
+        }
+    },
+)
+async def revoke_token(token_details: dict = Depends(RefreshTokenBearer())):
+    jti = token_details["jti"]
+    await add_jti_to_blocklist(jti)
+    return {"message": "Logged Out Successfully"}
 
 
 @router.get("/passwords/reset")
