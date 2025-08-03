@@ -317,7 +317,7 @@ async def get_current_user(
             "content": {
                 "application/json": {
                     "example": {
-                        "message": "TLogged Out successfully",
+                        "message": "Logged Out successfully",
                     }
                 }
             },
@@ -330,9 +330,37 @@ async def revoke_token(token_details: dict = Depends(RefreshTokenBearer())):
     return {"message": "Logged Out Successfully"}
 
 
-@router.get("/passwords/reset")
-async def password_reset_request(email_data: PasswordResetModel):
-    pass
+@router.get("/passwords/reset", status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Please check your email for instructions to reset your password",
+                    }
+                }
+            },
+        }
+    },)
+async def password_reset_request(
+    email_data: PasswordResetModel,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
+):
+    email = email_data.email
+    user = UserService.get_user_by_email(email)
+    otp = generate_otp(user, session)
+    send_email(
+        background_tasks,
+        "Reset Your Password",
+        user.email,
+        {"name": user.first_name, "otp": str(otp)},
+        "password_reset_email.html",
+    )
+
+    return {
+        "message": "Please check your email for instructions to reset your password",
+    }
 
 
 @router.get("/passwords/reset/verify")
