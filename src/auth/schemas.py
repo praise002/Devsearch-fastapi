@@ -48,7 +48,7 @@ class UserUpdate(BaseModel):
 
 class UserResponse(BaseModel):
     email: EmailStr
-    message: str
+    message: str = "Account Created! Check email to verify your account"
 
 
 class UserLoginModel(BaseModel):
@@ -75,6 +75,7 @@ class PasswordResetVerifyOtpModel(BaseModel):
 
 
 class PasswordResetConfirmModel(BaseModel):
+    email: EmailStr
     new_password: str
     confirm_new_password: str
 

@@ -102,7 +102,7 @@ async def create_user_account(
     }
 
 
-@router.get(
+@router.post(
     "/verification/verify",
     status_code=status.HTTP_200_OK,
     responses={
@@ -143,7 +143,7 @@ async def verify_user_account(
         }
 
     user_service.update_user(user, {"is_email_verified": True}, session)
-    # Clear OTP after verification
+
     invalidate_previous_otps(user, session)
 
     send_email(
@@ -159,15 +159,28 @@ async def verify_user_account(
     }
 
 
-@router.get(
+@router.post(
     "/verification",
     status_code=status.HTTP_200_OK,
     responses={
         200: {
             "content": {
                 "application/json": {
-                    "example": {
-                        "message": "OTP sent successfully",
+                    "examples": {
+                        "OtpResent": {
+                            "summary": "OTP Resent Successful",
+                            "value": {
+                                "status": "success",
+                                "message": "OTP sent successfully",
+                            },
+                        },
+                        "EmailVerified": {
+                            "summary": "Email already verified",
+                            "value": {
+                                "status": "success",
+                                "message": "Email address already verified. No OTP sent",
+                            },
+                        },
                     }
                 }
             },
@@ -187,6 +200,7 @@ async def resend_verification_email(
 
     if user.is_email_verified:
         return {
+            "status": "success",
             "message": "Email address already verified. No OTP sent",
         }
 
@@ -201,11 +215,12 @@ async def resend_verification_email(
     )
 
     return {
+        "status": "success",
         "message": "OTP sent successfully",
     }
 
-
-@router.get(
+# TODO: CONTINUE
+@router.post(
     "/token",
     status_code=status.HTTP_200_OK,
     responses={
@@ -219,7 +234,42 @@ async def resend_verification_email(
                     }
                 }
             },
-        }
+        },
+        401: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "failure",
+                        "message": "No active account found with the given credentials",
+                        "error_code": "unauthorized",
+                    }
+                }
+            },
+        },
+        403: {
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "EmailNotVerified": {
+                            "summary": "Email not verified",
+                            "value": {
+                                "status": "failure",
+                                "message": "Email not verified. Please verify your email before logging in",
+                                "error_code": "forbidden",
+                            },
+                        },
+                        "AccountDisabled": {
+                            "summary": "Account disabled",
+                            "value": {
+                                "status": "failure",
+                                "message": "Your account has been disabled. Please contact support for assistance",
+                                "error_code": "forbidden",
+                            },
+                        },
+                    }
+                }
+            },
+        },
     },
 )
 async def login_user(
@@ -230,46 +280,58 @@ async def login_user(
 
     user = await user_service.get_user_by_email(email, session)
 
-    if user is not None:
+    if user is None or not verify_password(password, user.password_hash):
+        return JSONResponse(
+            content={
+                "status": "failure",
+                "message": "No active account found with the given credentials",
+                "error_code": "unauthorized",
+            },
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
 
-        if not user.is_email_verified:
-            return JSONResponse(
-                content={
-                    "message": "Email not verified. Please verify your email before logging in"
-                },
-                status_code=status.HTTP_403_FORBIDDEN,
-            )
+    if not user.is_email_verified:
+        return JSONResponse(
+            content={
+                "status": "failure",
+                "message": "Email not verified. Please verify your email before logging in",
+                "error_code": "forbidden",
+            },
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
 
-        if not user.is_active:
-            return JSONResponse(
-                content={
-                    "message": "Your account has been disabled. Please contact support for assistance"
-                },
-                status_code=status.HTTP_403_FORBIDDEN,
-            )
+    if not user.is_active:
+        return JSONResponse(
+            content={
+                "status": "failure",
+                "message": "Your account has been disabled. Please contact support for assistance",
+                "error_code": "forbidden",
+            },
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
 
-        password_valid = verify_password(password, user.password_hash)
-        if password_valid:
-            access_token = create_access_token(
-                user_data={
-                    "email": user.email,
-                    "user_id": str(user.id),
-                    "role": user.role,
-                }
-            )
-            refresh_token = create_access_token(
-                user_data={
-                    "email": user.email,
-                    "user_id": str(user.id),
-                },
-                refresh=True,
-                expiry=timedelta(days=90),
-            )
-            return {
-                "message": "Login successful",
-                "access_token": access_token,
-                "refresh_token": refresh_token,
-            }  # TODO: USE HTTP-COOKIE LATER
+    password_valid = verify_password(password, user.password_hash)
+    if password_valid:
+        access_token = create_access_token(
+            user_data={
+                "email": user.email,
+                "user_id": str(user.id),
+                "role": user.role,
+            }
+        )
+        refresh_token = create_access_token(
+            user_data={
+                "email": user.email,
+                "user_id": str(user.id),
+            },
+            refresh=True,
+            expiry=timedelta(days=90),
+        )
+        return {
+            "message": "Login successful",
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+        }  # TODO: USE HTTP-COOKIE LATER
 
 
 @router.get(
@@ -330,7 +392,9 @@ async def revoke_token(token_details: dict = Depends(RefreshTokenBearer())):
     return {"message": "Logged Out Successfully"}
 
 
-@router.get("/passwords/reset", status_code=status.HTTP_200_OK,
+@router.get(
+    "/passwords/reset",
+    status_code=status.HTTP_200_OK,
     responses={
         200: {
             "content": {
@@ -341,7 +405,8 @@ async def revoke_token(token_details: dict = Depends(RefreshTokenBearer())):
                 }
             },
         }
-    },)
+    },
+)
 async def password_reset_request(
     email_data: PasswordResetModel,
     background_tasks: BackgroundTasks,
@@ -363,16 +428,97 @@ async def password_reset_request(
     }
 
 
-@router.get("/passwords/reset/verify")
-async def password_reset_verify_otp(data: PasswordResetVerifyOtpModel):
-    pass
-
-
-@router.get("/passwords/reset/complete")
-async def password_reset_done(
-    passwords: PasswordResetConfirmModel, session: AsyncSession = Depends(get_session)
+@router.get(
+    "/passwords/reset/verify",
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "OTP verified, proceed to set a new password",
+                    }
+                }
+            },
+        }
+    },
+)
+async def password_reset_verify_otp(
+    data: PasswordResetVerifyOtpModel,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
 ):
-    pass
+    email = data.email
+    otp = data.otp
+
+    user = await user_service.get_user_by_email(email, session)
+
+    if not user:
+        raise UserNotFound()
+
+    otp_record = await user_service.get_otp_by_user(user_id, otp, session)
+    user_id = user.id
+
+    if not otp_record or not otp_record.is_valid:
+        raise InvalidOtp()
+
+    # Clear OTP after verification
+    invalidate_previous_otps(user, session)
+
+    send_email(
+        background_tasks,
+        "Verify your email",
+        user.email,
+        {"name": user.first_name},
+        "welcome_message",
+    )
+
+    return {
+        "message": "OTP verified, proceed to set a new password",
+    }
+
+
+@router.get(
+    "/passwords/reset/complete",
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Your password has been reset, proceed to login",
+                    }
+                }
+            },
+        }
+    },
+)
+async def password_reset_done(
+    data: PasswordResetConfirmModel,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
+):
+    email = data.email
+    new_password = data.new_password
+
+    user = await user_service.get_user_by_email(email, session)
+
+    if not user:
+        raise UserNotFound()
+
+    passwd_hash = hash_password(new_password)
+    await user_service.update_user(user, {"password_hash": passwd_hash}, session)
+    send_email(
+        background_tasks,
+        "Password Reset Successful",
+        user.email,
+        {"name": user.first_name},
+        "password_reset_success.html",
+    )
+
+    return {
+        "message": "Your password has been reset, proceed to login",
+    }
 
 
 @router.get("/passwords/change")
