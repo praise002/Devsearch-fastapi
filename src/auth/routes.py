@@ -48,7 +48,11 @@ REFRESH_TOKEN = Config.REFRESH_TOKEN_EXPIRY
 
 
 @router.post(
-    "/register", status_code=status.HTTP_201_CREATED, response_model=UserResponse
+    "/register",
+    status_code=status.HTTP_201_CREATED,
+    response_model=UserResponse,
+    summary="Register a new user",
+    description="This endpoint registers new users into our application",
 )
 async def create_user_account(
     user_data: UserCreate,
@@ -105,6 +109,8 @@ async def create_user_account(
 @router.post(
     "/verification/verify",
     status_code=status.HTTP_200_OK,
+    summary="Verify a user's email",
+    description="This endpoint verifies a user's email",
     responses={
         200: {
             "content": {
@@ -162,6 +168,8 @@ async def verify_user_account(
 @router.post(
     "/verification",
     status_code=status.HTTP_200_OK,
+    summary="Send OTP to a user's email",
+    description="This endpoint sends OTP to a user's email for verification",
     responses={
         200: {
             "content": {
@@ -219,10 +227,14 @@ async def resend_verification_email(
         "message": "OTP sent successfully",
     }
 
+
 # TODO: CONTINUE
+# MIGHT REMOVE SUMMARY AND LEAVE THE DEFAULT SUMMARY
 @router.post(
     "/token",
     status_code=status.HTTP_200_OK,
+    summary="Login a user",
+    description="This endpoint generates new access and refresh tokens for authentication",
     responses={
         200: {
             "content": {
@@ -337,6 +349,8 @@ async def login_user(
 @router.get(
     "/token/refresh",
     status_code=status.HTTP_200_OK,
+    summary="Refresh user access token",
+    description="This endpoint allows users to refresh their access token using a valid refresh token. It returns a new access token, which can be used for further authenticated requests.",
     responses={
         200: {
             "content": {
@@ -344,22 +358,29 @@ async def login_user(
                     "example": {
                         "message": "Token refreshed successfully",
                         "access_token": ACCESS_TOKEN_EXAMPLE,
+                        "refresh_token": REFRESH_TOKEN_EXAMPLE,
                     }
                 }
             },
         }
     },
 )
-async def get_new_access_token(token_details: dict = Depends(RefreshTokenBearer())):
+async def refresh_token(token_details: dict = Depends(RefreshTokenBearer())):
     expiry_timestamp = token_details["exp"]
 
     if datetime.fromtimestamp(expiry_timestamp) > datetime.now():
         new_access_token = create_access_token(user_data=token_details["user"])
+        new_refresh_token = create_access_token(
+            token_details["user"],
+            refresh=True,
+            expiry=timedelta(days=90),
+        )
         return {
             "message": "Token refreshed successfully",
             "access_token": new_access_token,
+            "refresh_token": new_refresh_token,
         }
-
+    # TODO: 401 NOT SHOWING
     raise InvalidToken()
 
 
