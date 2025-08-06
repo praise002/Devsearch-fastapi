@@ -55,7 +55,7 @@ admin = Admin(async_engine, title="Devsearch")
 # Mount admin to your app
 # admin.mount_to(app)
 
-app.include_router(auth_router, prefix=f"/api/{version}/auth", tags=["auth"])
+app.include_router(auth_router, prefix=f"/api/{version}/auth", tags=["Auth"])
 
 
 @app.get("/")

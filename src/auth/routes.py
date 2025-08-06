@@ -51,7 +51,6 @@ REFRESH_TOKEN = Config.REFRESH_TOKEN_EXPIRY
     "/register",
     status_code=status.HTTP_201_CREATED,
     response_model=UserResponse,
-    summary="Register a new user",
     description="This endpoint registers new users into our application",
 )
 async def create_user_account(
@@ -109,7 +108,6 @@ async def create_user_account(
 @router.post(
     "/verification/verify",
     status_code=status.HTTP_200_OK,
-    summary="Verify a user's email",
     description="This endpoint verifies a user's email",
     responses={
         200: {
@@ -168,7 +166,6 @@ async def verify_user_account(
 @router.post(
     "/verification",
     status_code=status.HTTP_200_OK,
-    summary="Send OTP to a user's email",
     description="This endpoint sends OTP to a user's email for verification",
     responses={
         200: {
@@ -228,12 +225,9 @@ async def resend_verification_email(
     }
 
 
-# TODO: CONTINUE
-# MIGHT REMOVE SUMMARY AND LEAVE THE DEFAULT SUMMARY
 @router.post(
     "/token",
     status_code=status.HTTP_200_OK,
-    summary="Login a user",
     description="This endpoint generates new access and refresh tokens for authentication",
     responses={
         200: {
@@ -346,11 +340,10 @@ async def login_user(
         }  # TODO: USE HTTP-COOKIE LATER
 
 
-@router.get(
+@router.post(
     "/token/refresh",
     status_code=status.HTTP_200_OK,
-    summary="Refresh user access token",
-    description="This endpoint allows users to refresh their access token using a valid refresh token. It returns a new access token, which can be used for further authenticated requests.",
+    description="This endpoint allows users to refresh their access token using a valid refresh token. It returns a new access and refresh token, which can be used for further authenticated requests.",
     responses={
         200: {
             "content": {
@@ -362,7 +355,19 @@ async def login_user(
                     }
                 }
             },
-        }
+        },
+        401: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "failure",
+                        "message": "Invalid token or token expired.",
+                        "resolution": "Please get a new token",
+                        "error_code": "invalid_token",
+                    }
+                }
+            }
+        },
     },
 )
 async def refresh_token(token_details: dict = Depends(RefreshTokenBearer())):
@@ -380,11 +385,12 @@ async def refresh_token(token_details: dict = Depends(RefreshTokenBearer())):
             "access_token": new_access_token,
             "refresh_token": new_refresh_token,
         }
-    # TODO: 401 NOT SHOWING
+
     raise InvalidToken()
 
 
 # TODO: PUT THE RESPONSE MODEL LATER
+# TODO: CONTINUE
 @router.get("/me", status_code=status.HTTP_200_OK, response_model="")
 async def get_current_user(
     user=Depends(get_current_user), _: bool = Depends(role_checker)
