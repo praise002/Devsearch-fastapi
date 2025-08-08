@@ -21,6 +21,7 @@ from src.auth.schemas import (
     SendOtp,
     UserCreate,
     UserLoginModel,
+    UserRegistrationResponse,
     UserResponse,
 )
 from src.auth.service import UserService
@@ -50,7 +51,7 @@ REFRESH_TOKEN = Config.REFRESH_TOKEN_EXPIRY
 @router.post(
     "/register",
     status_code=status.HTTP_201_CREATED,
-    response_model=UserResponse,
+    response_model=UserRegistrationResponse,
     description="This endpoint registers new users into our application",
 )
 async def create_user_account(
@@ -389,13 +390,60 @@ async def refresh_token(token_details: dict = Depends(RefreshTokenBearer())):
     raise InvalidToken()
 
 
-# TODO: PUT THE RESPONSE MODEL LATER
-# TODO: CONTINUE
-@router.get("/me", status_code=status.HTTP_200_OK, response_model="")
+UUID_EXAMPLE = "123e4567-e89b-12d3-a456-426614174000"
+
+
+@router.get(
+    "/me",
+    status_code=status.HTTP_200_OK,
+    response_model=UserResponse,
+    description="This endpoint returns the authenticated user's profile information.",
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": UUID_EXAMPLE,
+                        "email": "user@example.com",
+                        "first_name": "John",
+                        "last_name": "Doe",
+                        "username": "johndoe",
+                    }
+                }
+            }
+        },
+        401: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "failure",
+                        "message": "Please provide a valid access token.",
+                        "resolution": "Please get an access token",
+                        "error_code": "access_token_required",
+                    }
+                }
+            }
+        },
+    },
+)
 async def get_current_user(
-    user=Depends(get_current_user), _: bool = Depends(role_checker)
+    user=Depends(get_current_user),
+    _: bool = Depends(role_checker),
+    session: AsyncSession = Depends(get_session),
 ):
-    return user
+    profile = await session.get(Profile, user.id)
+    # TODO: FIX LATER - should do something similar to serializer.data
+    # Returning 403 instead of 401
+    return {
+        "id": user.id,
+        "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "username": user.username,
+        "bio": profile.bio,
+        "location": profile.location,
+        "avatar_url": profile.avatar_url,
+    }
 
 
 @router.get(

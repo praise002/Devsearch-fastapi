@@ -1,4 +1,5 @@
 from typing import Self
+from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
@@ -45,8 +46,33 @@ class UserUpdate(BaseModel):
     first_name: str | None = Field(default=None, max_length=50)
     last_name: str | None = Field(default=None, max_length=50)
 
+class ProfileSkillResponse(BaseModel):
+    description: str | None = None
+    
+class SkillResponse(BaseModel):
+    id: UUID
+    name: str
+    profile_skill: ProfileSkillResponse
+
+class ProfileResponse(BaseModel):
+    short_intro: str | None = None
+    bio: str | None = None
+    location: str | None = None
+    avatar_url: str | None = None
+    github: str | None = None
+    stack_overflow: str | None = None
+    tw: str | None = None
+    ln: str | None = None
+    website: str | None = None
+    skills: list[SkillResponse]
 
 class UserResponse(BaseModel):
+    first_name: str 
+    last_name: str 
+    username: str  
+    email: EmailStr
+
+class UserRegistrationResponse(BaseModel):
     email: EmailStr
     message: str = "Account Created! Check email to verify your account"
 

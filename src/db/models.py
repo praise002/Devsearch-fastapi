@@ -16,7 +16,6 @@ def get_utc_now():
 
 
 class User(SQLModel, table=True):
-
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     first_name: str = Field(max_length=50)
     last_name: str = Field(max_length=50)
