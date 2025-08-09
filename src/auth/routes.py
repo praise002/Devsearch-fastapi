@@ -4,6 +4,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, status
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from sqlalchemy.orm import selectinload
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.auth.dependencies import (
@@ -19,6 +21,7 @@ from src.auth.schemas import (
     PasswordResetModel,
     PasswordResetVerifyOtpModel,
     SendOtp,
+    SkillResponse,
     UserCreate,
     UserLoginModel,
     UserRegistrationResponse,
@@ -408,6 +411,32 @@ UUID_EXAMPLE = "123e4567-e89b-12d3-a456-426614174000"
                         "first_name": "John",
                         "last_name": "Doe",
                         "username": "johndoe",
+                        "short_intro": "Full-stack developer passionate about building scalable web applications",
+                        "bio": "I'm a software engineer with 5+ years of experience in Python, JavaScript, and cloud technologies. I love contributing to open-source projects and mentoring junior developers.",
+                        "location": "San Francisco, CA",
+                        "avatar_url": "https://example.com/avatars/johndoe.jpg",
+                        "github": "https://github.com/johndoe",
+                        "stack_overflow": "https://stackoverflow.com/users/12345/johndoe",
+                        "tw": "https://twitter.com/johndoe",
+                        "ln": "https://linkedin.com/in/johndoe",
+                        "website": "https://johndoe.dev",
+                        "skills": [
+                            {
+                                "id": UUID_EXAMPLE,
+                                "name": "Python",
+                                "description": "Expert level proficiency in Python development",
+                            },
+                            {
+                                "id": UUID_EXAMPLE,
+                                "name": "FastAPI",
+                                "description": "Advanced knowledge of FastAPI framework",
+                            },
+                            {
+                                "id": UUID_EXAMPLE,
+                                "name": "React",
+                                "description": "Intermediate level React development skills",
+                            },
+                        ],
                     }
                 }
             }
@@ -426,24 +455,51 @@ UUID_EXAMPLE = "123e4567-e89b-12d3-a456-426614174000"
         },
     },
 )
-async def get_current_user(
-    user=Depends(get_current_user),
+async def get_current_user_endpoint(
+    current_user=Depends(get_current_user),
     _: bool = Depends(role_checker),
     session: AsyncSession = Depends(get_session),
 ):
-    profile = await session.get(Profile, user.id)
-    # TODO: FIX LATER - should do something similar to serializer.data
-    # Returning 403 instead of 401
-    return {
-        "id": user.id,
-        "email": user.email,
-        "first_name": user.first_name,
-        "last_name": user.last_name,
-        "username": user.username,
-        "bio": profile.bio,
-        "location": profile.location,
-        "avatar_url": profile.avatar_url,
-    }
+    statement = (
+        select(User)
+        .options(selectinload(User.profile))
+        .where(User.id == current_user.id)
+    )
+    result = await session.exec(statement)
+    user = result.first()
+    profile = user.profile
+    skill = profile.skill
+    profile_skill = skill.profile_skill
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="User not found"
+        )
+
+    # TODO: Returning 403 instead of 401
+
+    return UserResponse(
+        # User fields
+        id=user.id,
+        email=user.email,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        username=user.username,
+        # Profile fields
+        short_intro=profile.short_intro,
+        bio=profile.bio,
+        location=profile.location,
+        github=profile.github,
+        stack_overflow=profile.stack_overflow,
+        tw=profile.tw,
+        ln=profile.ln,
+        website=profile.website,
+        skills=SkillResponse(
+            id=skill.id,
+            name=skill.name,
+            description=profile_skill.description,
+        ),
+    )
 
 
 @router.get(

@@ -46,15 +46,25 @@ class UserUpdate(BaseModel):
     first_name: str | None = Field(default=None, max_length=50)
     last_name: str | None = Field(default=None, max_length=50)
 
-class ProfileSkillResponse(BaseModel):
-    description: str | None = None
-    
+
 class SkillResponse(BaseModel):
     id: UUID
     name: str
-    profile_skill: ProfileSkillResponse
+    description: str | None = None
 
-class ProfileResponse(BaseModel):
+    class Config:
+        from_attributes = True
+
+
+class UserResponse(BaseModel):
+    # User fields
+    id: UUID
+    first_name: str
+    last_name: str
+    username: str
+    email: EmailStr
+
+    # Profile fields
     short_intro: str | None = None
     bio: str | None = None
     location: str | None = None
@@ -64,13 +74,12 @@ class ProfileResponse(BaseModel):
     tw: str | None = None
     ln: str | None = None
     website: str | None = None
-    skills: list[SkillResponse]
 
-class UserResponse(BaseModel):
-    first_name: str 
-    last_name: str 
-    username: str  
-    email: EmailStr
+    skills: list[SkillResponse] = []
+
+    class Config:
+        from_attributes = True
+
 
 class UserRegistrationResponse(BaseModel):
     email: EmailStr
