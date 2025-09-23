@@ -1,4 +1,4 @@
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -16,13 +16,22 @@ from src.errors import (
 
 user_service = UserService()
 
+# NOTE:
+# - auto_error=False: so that we can use our custom 401 error 
+# instead of default 403
+# It returns None if no auth header so we need the check below
+# if creds is None:
 
 class TokenBearer(HTTPBearer):
-    def __init__(self, auto_error=True):
+    def __init__(self, auto_error=False):
         super().__init__(auto_error=auto_error)
 
     async def __call__(self, request: Request) -> HTTPAuthorizationCredentials | None:
         creds = await super().__call__(request)
+        if creds is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Not Authenticated"
+            )
         token = creds.credentials
         token_data = decode_token(token)
 

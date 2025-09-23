@@ -476,8 +476,6 @@ async def get_current_user_endpoint(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="User not found"
         )
 
-    # TODO: Returning 403 instead of 401
-
     return UserResponse(
         # User fields
         id=user.id,

@@ -19,6 +19,7 @@ show-logs:
 
 serv:
 	uvicorn src:app --reload
+# 	python -m uvicorn src:app --reload
 
 act:
 	.\env\Scripts\activate
