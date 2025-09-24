@@ -133,6 +133,32 @@ def register_all_errors(app: FastAPI):
         ),
     )
 
+    app.add_exception_handler(
+        PasswordMismatch,
+        create_exception_handler(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            initial_detail={
+                "status": "failure",
+                "message": "New password and confirm password do not match.",
+                "error_code": "password_mismatch",
+            },
+        ),
+    )
+    
+    app.add_exception_handler(
+        InvalidOldPassword,
+        create_exception_handler(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            initial_detail={
+                "status": "failure",
+                "message": "Invalid old password.",
+                "error_code": "invalid_old_password",
+            },
+        ),
+    )
+    
+    
+
     @app.exception_handler(500)
     async def internal_server_error(request, exc):
         return JSONResponse(
@@ -207,6 +233,17 @@ class UserNotFound(BaseException):
 
 class AccountNotVerified(Exception):
     """Account not yet verified"""
+
+    pass
+
+
+class PasswordMismatch(Exception):
+    """New password and confirm password deosn't match"""
+
+    pass
+
+class InvalidOldPassword(Exception):
+    """Invalid old password"""
 
     pass
 

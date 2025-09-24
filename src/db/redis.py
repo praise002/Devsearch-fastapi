@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from redis import asyncio as aioredis
 
 from src.config import Config

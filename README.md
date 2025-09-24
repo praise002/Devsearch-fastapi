@@ -197,6 +197,7 @@ src/
 - [How to send an email in fastapi](https://medium.com/nerd-for-tech/how-to-send-email-using-python-fastapi-947921059f0c)
 - [Fastapi mail](https://sabuhish.github.io/fastapi-mail/example/#using-jinja2-html-templates)
 - [Resolved issue with 403 for unauthenticated users](https://github.com/fastapi/fastapi/issues/2026)
+- [Fastapi JWT Auth](https://indominusbyte.github.io/fastapi-jwt-auth/usage/revoking/)
 
 ## 🤝 Contributing
 
