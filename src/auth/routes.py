@@ -40,7 +40,7 @@ from src.auth.utils import (
 from src.config import Config
 from src.db.main import get_session
 from src.db.models import Profile, User
-from src.db.redis import add_jti_to_blocklist
+from src.db.redis import add_jti_to_blocklist, blacklist_all_user_tokens
 from src.errors import (
     InvalidOldPassword,
     InvalidOtp,
@@ -676,8 +676,7 @@ async def password_change(
     hashed_password = hash_password(data.new_password)
     await user_service.update_user(user, {"hashed_password": hashed_password})
 
-    current_jti = current_refresh_token["jti"]
-    await add_jti_to_blocklist(current_jti)
+    await blacklist_all_user_tokens(user.id)  # or str(user.id)
 
     access_token = create_access_token(
         user_data={

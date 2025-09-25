@@ -9,6 +9,7 @@ from sqlmodel import select
 
 from src.config import Config
 from src.db.models import Otp
+from src.db.redis import store_token
 
 pwd_context = CryptContext(schemes=["bcrypt"])
 ACCESS_TOKEN = Config.ACCESS_TOKEN_EXPIRY
@@ -45,6 +46,9 @@ def create_access_token(
     token = jwt.encode(
         payload=payload, key=Config.JWT_SECRET, algorithm=Config.JWT_ALGORITHM
     )
+    
+    store_token(user_data["user_id"], user_data["jti"], expiry)
+    
     return token
 
 
