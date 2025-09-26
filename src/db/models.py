@@ -43,6 +43,9 @@ class User(SQLModel, table=True):
             nullable=False,
         ),
     )
+    jwts: list["Jwt"] | None = Relationship(
+        back_populates="user", passive_deletes="all"
+    )
     otps: list["Otp"] | None = Relationship(
         back_populates="user", passive_deletes="all"
     )
@@ -59,6 +62,19 @@ class User(SQLModel, table=True):
         return self.full_name
 
 
+class Jwt(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID | None = Field(
+        default=None, foreign_key="user.id", ondelete="CASCADE"
+    )
+    user: User | None = Relationship(back_populates="jwts")
+    access: str 
+    refresh: str 
+    
+
+    def __repr__(self):
+        return f"Access - {self.access} | Refresh - {self.refresh}"
+    
 class Otp(SQLModel, table=True):
     id: int = Field(sa_column=Column(Integer, primary_key=True, autoincrement=True))
     otp: int

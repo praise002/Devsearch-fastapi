@@ -32,6 +32,7 @@ from src.auth.utils import (
     ACCESS_TOKEN_EXAMPLE,
     REFRESH_TOKEN_EXAMPLE,
     create_access_token,
+    create_token_pair,
     generate_otp,
     hash_password,
     invalidate_previous_otps,
@@ -677,26 +678,17 @@ async def password_change(
     await user_service.update_user(user, {"hashed_password": hashed_password})
 
     await blacklist_all_user_tokens(user.id)  # or str(user.id)
-
-    access_token = create_access_token(
-        user_data={
+    
+    user_data={
             "email": user.email,
             "user_id": str(user.id),
             "role": user.role,
         }
-    )
-    refresh_token = create_access_token(
-        user_data={
-            "email": user.email,
-            "user_id": str(user.id),
-        },
-        refresh=True,
-        expiry=timedelta(days=90),
-    )
+    tokens = create_token_pair(user_data)
+    
     return {
         "message": "Password changed successfully",
-        "access_token": access_token,
-        "refresh_token": refresh_token,
+        **tokens
     }  # TODO: USE HTTP-COOKIE LATER
 
     # TODO: STILL FIGURING OUT A WAY TO BLACKLIST ALL TOKENS

@@ -1,7 +1,7 @@
 import logging
 import random
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import jwt
 from passlib.context import CryptContext
@@ -9,16 +9,18 @@ from sqlmodel import select
 
 from src.config import Config
 from src.db.models import Otp
-from src.db.redis import store_token
+
 
 pwd_context = CryptContext(schemes=["bcrypt"])
 ACCESS_TOKEN = Config.ACCESS_TOKEN_EXPIRY
+ACCESS_TOKEN = Config.REFRESH_TOKEN_EXPIRY
 
 # TODO; PUT IN SCHEMA LATER
 ACCESS_TOKEN_EXAMPLE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzMxMDY5NzEyLCJpYXQiOjE3MzA5ODMzMTIsImp0aSI6ImIzYTM2NmEwMDZkZTQxZTg4YzRlNDhmNzZmYmYyNWQ0IiwidXNlcl9pZCI6IjNhYzFlMzJiLTUzOWYtNDZkYi05ODZlLWRiZDFkZDQyYmUzMCIsInVzZXJuYW1lIjoiZGF2aWQtYmFkbXVzIn0.YuhFA2m47oDiwkOUd359hcumhN6lX5QfvXd92ES8vSQ"
 REFRESH_TOKEN_EXAMPLE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTczODc1OTMxMiwiaWF0IjoxNzMwOTgzMzEyLCJqdGkiOiI5NjBkZmE2NTFhYjk0YWYzYTU4MjgzMTcwYjIxODEwYiIsInVzZXJfaWQiOiIzYWMxZTMyYi01MzlmLTQ2ZGItOTg2ZS1kYmQxZGQ0MmJlMzAiLCJ1c2VybmFtZSI6ImRhdmlkLWJhZG11cyJ9.A5shgQ-SI891PRS6nDs4-LA6ZNBoVXmLF2L9VMXoPC4"
 
 # TODO: ROTATION, BLACKLIST, SIGNING_KEY
+
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
@@ -29,28 +31,57 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(
-    user_data: dict, expiry: timedelta = None, refresh: bool = False
+    user_data: dict, expiry: timedelta = None
 ):
-    payload = {}
+    if expiry is None:
+        # expiry = timedelta(seconds=ACCESS_TOKEN_EXPIRY)
+        expiry = timedelta(days=1)
 
-    payload["user"] = user_data
-    # prod
-    # payload['exp'] = datetime.now() + (expiry if expiry is not None else timedelta(seconds=ACCESS_TOKEN_EXPIRY))
-    # dev
-    payload["exp"] = datetime.now() + (
-        expiry if expiry is not None else timedelta(days=1)
-    )
-    payload["jti"] = str(uuid.uuid4())
-    payload["refresh"] = refresh
+    now = datetime.now(timezone.utc)
+
+    payload = {
+        "token_type": "access",
+        "exp": now + expiry,
+        "iat": now,
+        "jti": str(uuid.uuid4()),
+        "user": user_data,
+    }
 
     token = jwt.encode(
         payload=payload, key=Config.JWT_SECRET, algorithm=Config.JWT_ALGORITHM
     )
-    
-    store_token(user_data["user_id"], user_data["jti"], expiry)
-    
+
     return token
 
+def create_refresh_token(
+    user_data: dict, expiry: timedelta = None
+):
+    if expiry is None:
+        # expiry = timedelta(seconds=REFRESH_TOKEN_EXPIRY)
+        expiry = timedelta(days=90)
+
+    now = datetime.now(timezone.utc)
+
+    payload = {
+        "token_type": "refresh",
+        "exp": now + expiry,
+        "iat": now,
+        "jti": str(uuid.uuid4()),
+        "user": user_data,
+    }
+
+    token = jwt.encode(
+        payload=payload, key=Config.JWT_SECRET, algorithm=Config.JWT_ALGORITHM
+    )
+
+    return token
+
+def create_token_pair(user_data: dict) -> dict:
+    """Create both access and refresh tokens"""
+    return {
+        "access_token": create_access_token(user_data),
+        "refresh_token": create_refresh_token(user_data)
+    }
 
 def decode_token(token: str) -> dict:
     try:
