@@ -43,7 +43,7 @@ class User(SQLModel, table=True):
             nullable=False,
         ),
     )
-    jwts: list["Jwt"] | None = Relationship(
+    jwts: list["OutstandingToken"] | None = Relationship(
         back_populates="user", passive_deletes="all"
     )
     otps: list["Otp"] | None = Relationship(
@@ -62,18 +62,36 @@ class User(SQLModel, table=True):
         return self.full_name
 
 
-class Jwt(SQLModel, table=True):
+class OutstandingToken(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     user_id: uuid.UUID | None = Field(
         default=None, foreign_key="user.id", ondelete="CASCADE"
     )
     user: User | None = Relationship(back_populates="jwts")
-    access: str 
-    refresh: str 
+    jti: str = Field(unique=True)
+    created_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(
+            DateTime(timezone=True),
+            server_default=func.now(),
+            nullable=False,
+        ),
+    )
+    expires_at: datetime
+    blacklisted_tokens: list["BlacklistedToken"] | None = Relationship(
+        back_populates="token", passive_deletes="all"
+    )
     
 
     def __repr__(self):
-        return f"Access - {self.access} | Refresh - {self.refresh}"
+        return f"Refresh JTI: {self.jti}"
+
+class BlacklistedToken(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    token_id: uuid.UUID | None = Field(
+        default=None, foreign_key="outstandingtoken.id", ondelete="CASCADE"
+    )
+    token: OutstandingToken | None = Relationship(back_populates="blacklisted_tokens")
     
 class Otp(SQLModel, table=True):
     id: int = Field(sa_column=Column(Integer, primary_key=True, autoincrement=True))
@@ -86,6 +104,7 @@ class Otp(SQLModel, table=True):
             nullable=False,
         ),
     )
+    
 
     user_id: uuid.UUID | None = Field(
         default=None, foreign_key="user.id", ondelete="CASCADE"

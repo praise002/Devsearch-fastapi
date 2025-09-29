@@ -7,9 +7,9 @@ import jwt
 from passlib.context import CryptContext
 from sqlmodel import select
 
+from src.auth.service import UserService
 from src.config import Config
 from src.db.models import Otp
-
 
 pwd_context = CryptContext(schemes=["bcrypt"])
 ACCESS_TOKEN = Config.ACCESS_TOKEN_EXPIRY
@@ -30,9 +30,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def create_access_token(
-    user_data: dict, expiry: timedelta = None
-):
+def create_access_token(user_data: dict, expiry: timedelta = None):
     if expiry is None:
         # expiry = timedelta(seconds=ACCESS_TOKEN_EXPIRY)
         expiry = timedelta(days=1)
@@ -53,20 +51,20 @@ def create_access_token(
 
     return token
 
-def create_refresh_token(
-    user_data: dict, expiry: timedelta = None
-):
+
+def create_refresh_token(user_data: dict, expiry: timedelta = None):
     if expiry is None:
         # expiry = timedelta(seconds=REFRESH_TOKEN_EXPIRY)
         expiry = timedelta(days=90)
 
     now = datetime.now(timezone.utc)
+    jti = str(uuid.uuid4())
 
     payload = {
         "token_type": "refresh",
         "exp": now + expiry,
         "iat": now,
-        "jti": str(uuid.uuid4()),
+        "jti": jti,
         "user": user_data,
     }
 
@@ -76,12 +74,6 @@ def create_refresh_token(
 
     return token
 
-def create_token_pair(user_data: dict) -> dict:
-    """Create both access and refresh tokens"""
-    return {
-        "access_token": create_access_token(user_data),
-        "refresh_token": create_refresh_token(user_data)
-    }
 
 def decode_token(token: str) -> dict:
     try:

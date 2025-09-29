@@ -1,19 +1,13 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, status
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import ValidationError
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.auth.dependencies import (
-    AccessTokenBearer,
-    RefreshTokenBearer,
-    RoleChecker,
-    get_current_user,
-)
+from src.auth.dependencies import RefreshTokenBearer, RoleChecker, get_current_user
 from src.auth.schemas import (
     OtpVerify,
     PasswordChangeModel,
@@ -31,8 +25,6 @@ from src.auth.service import UserService
 from src.auth.utils import (
     ACCESS_TOKEN_EXAMPLE,
     REFRESH_TOKEN_EXAMPLE,
-    create_access_token,
-    create_token_pair,
     generate_otp,
     hash_password,
     invalidate_previous_otps,
@@ -41,7 +33,7 @@ from src.auth.utils import (
 from src.config import Config
 from src.db.main import get_session
 from src.db.models import Profile, User
-from src.db.redis import add_jti_to_blocklist, blacklist_all_user_tokens
+from src.db.redis import add_jti_to_blocklist
 from src.errors import (
     InvalidOldPassword,
     InvalidOtp,
@@ -329,26 +321,14 @@ async def login_user(
 
     password_valid = verify_password(password, user.password_hash)
     if password_valid:
-        access_token = create_access_token(
-            user_data={
-                "email": user.email,
-                "user_id": str(user.id),
-                "role": user.role,
-            }
-        )
-        refresh_token = create_access_token(
-            user_data={
-                "email": user.email,
-                "user_id": str(user.id),
-            },
-            refresh=True,
-            expiry=timedelta(days=90),
-        )
-        return {
-            "message": "Login successful",
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-        }  # TODO: USE HTTP-COOKIE LATER
+        user_data = user_data = {
+            "email": user.email,
+            "user_id": str(user.id),
+            "role": user.role,
+        }
+        tokens = user_service.create_token_pair(user_data)
+
+        return {"message": "Login successful", **tokens}  # TODO: USE HTTP-COOKIE LATER
 
 
 @router.post(
@@ -383,21 +363,16 @@ async def login_user(
 )
 async def refresh_token(token_details: dict = Depends(RefreshTokenBearer())):
     old_jti = token_details["jti"]
+    # TODO: SHOULD I BLACKLIST PREVIOUS REFRESH TOKEN
     await add_jti_to_blocklist(old_jti)
     expiry_timestamp = token_details["exp"]
 
     if datetime.fromtimestamp(expiry_timestamp) > datetime.now():
-        new_access_token = create_access_token(user_data=token_details["user"])
-        new_refresh_token = create_access_token(
+        new_token = user_service.create_token_pair(
             token_details["user"],
-            refresh=True,
-            expiry=timedelta(days=90),
         )
-        return {
-            "message": "Token refreshed successfully",
-            "access_token": new_access_token,
-            "refresh_token": new_refresh_token,
-        }
+
+        return {"message": "Token refreshed successfully", **new_token}
 
     raise InvalidToken()
 
@@ -509,7 +484,7 @@ async def get_current_user_endpoint(
     )
 
 
-@router.get(
+@router.post(
     "/logout",
     status_code=status.HTTP_200_OK,
     responses={
@@ -524,13 +499,16 @@ async def get_current_user_endpoint(
         }
     },
 )
-async def revoke_token(token_details: dict = Depends(RefreshTokenBearer())):
+async def revoke_token(
+    token_details: dict = Depends(RefreshTokenBearer()),
+    session: AsyncSession = Depends(get_session),
+):
     jti = token_details["jti"]
-    await add_jti_to_blocklist(jti)
+    await user_service.blacklist_user_token(jti, session)
     return {"message": "Logged Out Successfully"}
 
 
-@router.get(
+@router.post(
     "/passwords/reset",
     status_code=status.HTTP_200_OK,
     responses={
@@ -659,11 +637,10 @@ async def password_reset_done(
     }
 
 
-@router.get("/passwords/change", status_code=status.HTTP_200_OK)
+@router.post("/passwords/change", status_code=status.HTTP_200_OK)
 async def password_change(
     data: PasswordChangeModel,
     current_user=Depends(get_current_user),
-    current_refresh_token: dict = Depends(RefreshTokenBearer()),
     session: AsyncSession = Depends(get_session),
 ):
     if data.new_password != data.confirm_password:
@@ -677,23 +654,46 @@ async def password_change(
     hashed_password = hash_password(data.new_password)
     await user_service.update_user(user, {"hashed_password": hashed_password})
 
-    await blacklist_all_user_tokens(user.id)  # or str(user.id)
-    
-    user_data={
-            "email": user.email,
-            "user_id": str(user.id),
-            "role": user.role,
-        }
-    tokens = create_token_pair(user_data)
-    
+    await user_service.blacklist_all_user_tokens(user.id)  # or str(user.id)
+
+    user_data = {
+        "email": user.email,
+        "user_id": str(user.id),
+        "role": user.role,
+    }
+    tokens = user_service.create_token_pair(user_data)
+
     return {
         "message": "Password changed successfully",
-        **tokens
+        **tokens,
     }  # TODO: USE HTTP-COOKIE LATER
 
     # TODO: STILL FIGURING OUT A WAY TO BLACKLIST ALL TOKENS
     # TOKENS IS CURRENTLY NOT STORED ANYWHERE SO I PROBABLY NEED TO STORE
     # IT IN REDIS FOR EACH USER
+
+
+@router.post(
+    "/logout/all",
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Logged out of all devices successfully",
+                    }
+                }
+            },
+        }
+    },
+)
+async def revoke_all(
+    user=Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    await user_service.blacklist_all_user_tokens(user.id, session)
+    return {"message": "Logged out of all devices successfully"}
 
 
 @router.get("/signup/google")
