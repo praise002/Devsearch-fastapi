@@ -198,6 +198,7 @@ src/
 - [Fastapi mail](https://sabuhish.github.io/fastapi-mail/example/#using-jinja2-html-templates)
 - [Resolved issue with 403 for unauthenticated users](https://github.com/fastapi/fastapi/issues/2026)
 - [Fastapi JWT Auth](https://indominusbyte.github.io/fastapi-jwt-auth/usage/revoking/)
+- [Implementing Google OAuth2 in Fastapi](https://dev.to/ayoub3bidi/quick-tutorial-implementing-google-oauth2-in-fastapi-callback-method-ba4)
 
 ## 🤝 Contributing
 

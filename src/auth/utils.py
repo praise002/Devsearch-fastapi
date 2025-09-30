@@ -7,7 +7,6 @@ import jwt
 from passlib.context import CryptContext
 from sqlmodel import select
 
-from src.auth.service import UserService
 from src.config import Config
 from src.db.models import Otp
 

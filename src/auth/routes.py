@@ -361,9 +361,12 @@ async def login_user(
         },
     },
 )
-async def refresh_token(token_details: dict = Depends(RefreshTokenBearer())):
+async def refresh_token(
+    session: AsyncSession = Depends(get_session), token_details: dict = Depends(RefreshTokenBearer())
+):
     old_jti = token_details["jti"]
-    # TODO: SHOULD I BLACKLIST PREVIOUS REFRESH TOKEN
+    await user_service.blacklist_user_token(old_jti, session)
+
     await add_jti_to_blocklist(old_jti)
     expiry_timestamp = token_details["exp"]
 
@@ -667,10 +670,6 @@ async def password_change(
         "message": "Password changed successfully",
         **tokens,
     }  # TODO: USE HTTP-COOKIE LATER
-
-    # TODO: STILL FIGURING OUT A WAY TO BLACKLIST ALL TOKENS
-    # TOKENS IS CURRENTLY NOT STORED ANYWHERE SO I PROBABLY NEED TO STORE
-    # IT IN REDIS FOR EACH USER
 
 
 @router.post(

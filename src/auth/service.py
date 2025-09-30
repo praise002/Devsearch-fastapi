@@ -81,17 +81,16 @@ class UserService:
         session.refresh(outstanding_token)
         return outstanding_token
 
-    async def blacklist_user_token(self, user_id: str, session: AsyncSession):
-
-        statement = select(OutstandingToken).where(OutstandingToken.user_id == user_id)
+    async def blacklist_user_token(self, jti: str, session: AsyncSession):
+        statement = select(OutstandingToken).where(OutstandingToken.jti == jti)
         result = await session.exec(statement)
-        user_token = result.first()
+        token_record = result.first()
 
-        blacklisted_token = BlacklistedToken(token_id=user_token.id)
+        blacklisted_token = BlacklistedToken(token_id=token_record.id)
         session.add(blacklisted_token)
 
         # Also add to Redis for fast lookup during requests
-        await add_jti_to_blocklist(user_token.jti)
+        await add_jti_to_blocklist(jti)
 
         await session.commit()
 
@@ -135,6 +134,17 @@ class UserService:
         expired_tokens = result.all()
 
         for token in expired_tokens:
+            await session.delete(token)
+
+        await session.commit()
+
+    async def cleanup_blacklisted_tokens(self, session: AsyncSession):
+        """Remove blacklisted tokens from blacklisted tokens table"""
+        statement = select(BlacklistedToken)
+        result = await session.exec(statement)
+        blacklisted_tokens = result.all()
+
+        for token in blacklisted_tokens:
             await session.delete(token)
 
         await session.commit()
