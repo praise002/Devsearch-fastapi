@@ -21,7 +21,10 @@ class User(SQLModel, table=True):
     last_name: str = Field(max_length=50)
     username: str = Field(sa_column=Column(String(50), nullable=False, unique=True))
     email: EmailStr = Field(sa_column=Column(String(50), nullable=False, unique=True))
-    hashed_password: str = Field(exclude=True)
+    google_id: str = Field(sa_column=Column(String(50), unique=True))
+    auth_provider: str = Field(max_length=50)
+    # hashed_password: str = Field(exclude=True)
+    hashed_password: str | None = Field(default=None, exclude=True, nullable=True)
     is_active: bool = True
     is_email_verified: bool = False
     role: UserRole = Field(default=UserRole.user)
@@ -81,10 +84,10 @@ class OutstandingToken(SQLModel, table=True):
     blacklisted_tokens: list["BlacklistedToken"] | None = Relationship(
         back_populates="token", passive_deletes="all"
     )
-    
 
     def __repr__(self):
         return f"Refresh JTI: {self.jti}"
+
 
 class BlacklistedToken(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -92,7 +95,8 @@ class BlacklistedToken(SQLModel, table=True):
         default=None, foreign_key="outstandingtoken.id", ondelete="CASCADE"
     )
     token: OutstandingToken | None = Relationship(back_populates="blacklisted_tokens")
-    
+
+
 class Otp(SQLModel, table=True):
     id: int = Field(sa_column=Column(Integer, primary_key=True, autoincrement=True))
     otp: int
@@ -104,7 +108,6 @@ class Otp(SQLModel, table=True):
             nullable=False,
         ),
     )
-    
 
     user_id: uuid.UUID | None = Field(
         default=None, foreign_key="user.id", ondelete="CASCADE"

@@ -20,10 +20,10 @@ A powerful FastAPI-based platform designed to connect developers worldwide, enab
 - [x] User registration endpoint
 - [x] Password hashing utilities
 - [x] User profile auto-creation
-- [ ] Email verification system
-- [ ] JWT authentication implementation
-- [ ] Login/logout endpoints
-- [ ] Password reset functionality
+- [x] Email verification system
+- [x] JWT authentication implementation
+- [x] Login/logout endpoints
+- [x] Password reset functionality
 - [ ] User profile CRUD operations
 - [ ] User role management
 
@@ -158,6 +158,11 @@ src/
 7. **Access the application**
    - API Documentation: http://localhost:8000/api/v1/docs
    - Admin Interface: http://localhost:8000/admin
+
+8. **To generate secret key**
+   ```bash
+   python -c "import secrets; print(secrets.token_urlsafe(32))"
+   ```
 
 ## 📝 API Endpoints
 

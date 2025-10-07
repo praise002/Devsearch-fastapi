@@ -24,6 +24,16 @@ class UserInDB(UserBase):
 
 class UserCreate(UserBase):
     password: str | None = None
+    auth_provider: str | None = None
+    google_id: str | None = None
+
+    @model_validator(mode="after")
+    def validate_password_or_provider(self) -> Self:
+        # Require password for regular signup, but not for OAuth
+        if not self.auth_provider and not self.password:
+            raise ValueError("Password is required")
+
+        return self
 
 
 class OtpVerify(BaseModel):

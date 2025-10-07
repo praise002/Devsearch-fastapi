@@ -69,6 +69,19 @@ def register_all_errors(app: FastAPI):
     )
 
     app.add_exception_handler(
+        GoogleAuthenticationFailed,
+        create_exception_handler(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            initial_detail={
+                "status": "failure",
+                "message": "Google authentication failed.",
+                "resolution": "Please get a new token",
+                "error_code": "google_auth_failed",
+            },
+        ),
+    )
+
+    app.add_exception_handler(
         RevokedToken,
         create_exception_handler(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -134,6 +147,18 @@ def register_all_errors(app: FastAPI):
     )
 
     app.add_exception_handler(
+        UserNotActive,
+        create_exception_handler(
+            status_code=status.HTTP_403_FORBIDDEN,
+            initial_detail={
+                "status": "failure",
+                "message": "Your account has been disabled. Please contact support for assistance",
+                "error_code": "forbidden",
+            },
+        ),
+    )
+
+    app.add_exception_handler(
         PasswordMismatch,
         create_exception_handler(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -144,7 +169,7 @@ def register_all_errors(app: FastAPI):
             },
         ),
     )
-    
+
     app.add_exception_handler(
         InvalidOldPassword,
         create_exception_handler(
@@ -156,8 +181,6 @@ def register_all_errors(app: FastAPI):
             },
         ),
     )
-    
-    
 
     @app.exception_handler(500)
     async def internal_server_error(request, exc):
@@ -237,13 +260,26 @@ class AccountNotVerified(Exception):
     pass
 
 
+class UserNotActive(Exception):
+    """User not active"""
+
+    pass
+
+
 class PasswordMismatch(Exception):
     """New password and confirm password deosn't match"""
 
     pass
 
+
 class InvalidOldPassword(Exception):
     """Invalid old password"""
+
+    pass
+
+
+class GoogleAuthenticationFailed(Exception):
+    """Google authentication failed"""
 
     pass
 

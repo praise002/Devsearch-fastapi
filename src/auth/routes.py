@@ -1,12 +1,15 @@
+import logging
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from decouple import config
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.auth import oauth_config
 from src.auth.dependencies import RefreshTokenBearer, RoleChecker, get_current_user
 from src.auth.schemas import (
     OtpVerify,
@@ -32,13 +35,16 @@ from src.auth.utils import (
 )
 from src.config import Config
 from src.db.main import get_session
-from src.db.models import Profile, User
+from src.db.models import User
 from src.db.redis import add_jti_to_blocklist
 from src.errors import (
+    AccountNotVerified,
+    GoogleAuthenticationFailed,
     InvalidOldPassword,
     InvalidOtp,
     InvalidToken,
     PasswordMismatch,
+    UserNotActive,
     UserNotFound,
 )
 from src.mail import send_email
@@ -77,21 +83,7 @@ async def create_user_account(
             detail="User with username already exists.",
         )
 
-    hashed_password = hash_password(user_data.password)
-    extra_data = {
-        "hashed_password": hashed_password,
-    }
-    new_user = User.model_validate(user_data, update=extra_data)
-
-    session.add(new_user)
-
-    session.commit()
-    session.refresh(new_user)
-
-    profile = Profile(user_id=new_user.id)
-    session.add(profile)
-    session.commit()
-    session.refresh(profile)
+    new_user = user_service.create_user(user_data, session)
 
     otp = generate_otp(new_user, session)
     send_email(
@@ -155,7 +147,7 @@ async def verify_user_account(
 
     send_email(
         background_tasks,
-        "Verify your email",
+        "Account Verified",
         user.email,
         {"name": user.first_name},
         "welcome_message",
@@ -289,7 +281,11 @@ async def login_user(
 
     user = await user_service.get_user_by_email(email, session)
 
-    if user is None or not verify_password(password, user.password_hash):
+    if (
+        user is None
+        or user.hashed_password is None
+        or not verify_password(password, user.password_hash)
+    ):
         return JSONResponse(
             content={
                 "status": "failure",
@@ -300,24 +296,10 @@ async def login_user(
         )
 
     if not user.is_email_verified:
-        return JSONResponse(
-            content={
-                "status": "failure",
-                "message": "Email not verified. Please verify your email before logging in",
-                "error_code": "forbidden",
-            },
-            status_code=status.HTTP_403_FORBIDDEN,
-        )
+        raise AccountNotVerified()
 
     if not user.is_active:
-        return JSONResponse(
-            content={
-                "status": "failure",
-                "message": "Your account has been disabled. Please contact support for assistance",
-                "error_code": "forbidden",
-            },
-            status_code=status.HTTP_403_FORBIDDEN,
-        )
+        raise UserNotActive()
 
     password_valid = verify_password(password, user.password_hash)
     if password_valid:
@@ -362,7 +344,8 @@ async def login_user(
     },
 )
 async def refresh_token(
-    session: AsyncSession = Depends(get_session), token_details: dict = Depends(RefreshTokenBearer())
+    session: AsyncSession = Depends(get_session),
+    token_details: dict = Depends(RefreshTokenBearer()),
 ):
     old_jti = token_details["jti"]
     await user_service.blacklist_user_token(old_jti, session)
@@ -695,11 +678,73 @@ async def revoke_all(
     return {"message": "Logged out of all devices successfully"}
 
 
-@router.get("/signup/google")
-async def google_oauth_signup():
-    pass
+@router.get("/google", status_code=status.HTTP_200_OK)
+async def google_auth(request: Request):
+    """Redirect user to Google for authorization"""
+    redirect_url = config("GOOGLE_REDIRECT_URI")
+    return await oauth_config.google.authorize_redirect(request, redirect_url)
 
 
-@router.get("/login/google")
-async def google_oauth_login():
-    pass
+@router.get("/google/callback", status_code=status.HTTP_200_OK, include_in_schema=False)
+async def google_auth_callback(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
+):
+    """Handle Google OAuth callback - this is where you get tokens"""
+    try:
+        token = await oauth.google.authorize_access_token(request)
+        user_info = token.get("userinfo")
+        email = user_info.get("email")
+        AUTH_PROVIDER = "google"
+
+        existing_user = await user_service.get_user_by_email(email, session)
+
+        if existing_user and existing_user.auth_provider == AUTH_PROVIDER:
+            tokens = user_service.handle_oauth_user_login(existing_user, session)
+
+            return {"message": "Login successful", **tokens}
+
+        else:
+            first_name = user_info.get("given_name")
+            last_name = user_info.get("family_name")
+            # download and upload image to cloudinary
+            # picture = user_info.get("picture") TODO: LATER
+            # auth_provider = user_info.get("iss")
+            google_id = user_info.get("sub")
+            username = email.split("@")[0]
+            user_create_data = {
+                "first_name": first_name,
+                "last_name": last_name,
+                "username": username,
+                "email": email,
+                "google_id": google_id,
+                "auth_provider": AUTH_PROVIDER,
+            }
+
+            user_data = {
+                "email": new_user.email,
+                "user_id": str(new_user.id),
+                "role": new_user.role,
+            }
+
+            new_user, response = user_service.handle_oauth_user_register(
+                user_create_data, user_data, session
+            )
+
+            send_email(
+                background_tasks,
+                "Welcome",
+                new_user.email,
+                {"name": new_user.first_name},
+                "welcome_message",
+            )
+
+            return response
+
+    except Exception as e:
+        logging.exception(e)
+        raise GoogleAuthenticationFailed()
+
+
+#  user_info = await oauth.google.parse_id_token(request, token)

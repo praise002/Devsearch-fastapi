@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+from decouple import config
+from fastapi.responses import RedirectResponse
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -12,7 +14,7 @@ from src.auth.utils import (
 )
 from src.db.models import BlacklistedToken, Otp, OutstandingToken, Profile, User
 from src.db.redis import add_jti_to_blocklist, token_in_blacklist
-from src.errors import InvalidToken
+from src.errors import InvalidToken, UserNotActive
 
 
 class UserService:
@@ -43,24 +45,83 @@ class UserService:
         return user is not None
 
     async def create_user(self, user_data: UserCreate, session: AsyncSession):
+        extra_data = {}
+        if user_data.password:
+            extra_data["hashed_password"] = hash_password(user_data.password)
 
-        hashed_password = hash_password(user_data.password)
-        extra_data = {
-            "hashed_password": hashed_password,
-        }
+        else:
+            extra_data["hashed_password"] = None
+
         new_user = User.model_validate(user_data, update=extra_data)
+        
+        if user_data.auth_provider:
+            new_user.is_email_verified = True
 
         session.add(new_user)
 
-        session.commit()
-        session.refresh(new_user)
+        await session.commit()
+        await session.refresh(new_user)
 
         profile = Profile(user_id=new_user.id)
         session.add(profile)
-        session.commit()
-        session.refresh(profile)
+        await session.commit()
+        await session.refresh(profile)
 
         return new_user
+
+    async def handle_oauth_user_login(self, user: User, session: AsyncSession) -> dict:
+        """
+        Handle OAuth user login, ensuring email verification and active status.
+
+        Args:
+            user: The authenticated user from OAuth provider
+            session: Database session
+
+        Returns:
+            dict: Token pair (access_token, refresh_token)
+
+        Raises:
+            UserNotActive: If user account is disabled
+        """
+        if not user.is_email_verified:
+            user.is_email_verified = True
+            session.add(user)
+            await session.commit()
+            await session.refresh(user)
+
+        if not user.is_active:
+            raise UserNotActive()
+
+        # login user
+        user_data = {
+            "email": user.email,
+            "user_id": str(user.id),
+            "role": user.role,
+        }
+
+        return self.create_token_pair(user_data)
+
+    async def handle_oauth_user_register(
+        self, user_create_data, user_data, session: AsyncSession
+    ) -> dict:
+        new_user = self.create_user(user_create_data, user_data, session)
+        tokens = self.create_token_pair(user_data)
+        access = tokens["access"]
+        refresh = tokens["refresh"]
+
+        frontend_callback_url = config("FRONTEND_CALLBACK_URL")
+        redirect_url = f"{frontend_callback_url}" f"?access={access}&is_new=true"
+
+        response = RedirectResponse(redirect_url)
+        response.set_cookie(
+            key="refresh",
+            value=refresh,
+            httponly=True,
+            secure=True,  # Ensure you're using HTTPS
+            samesite="None",
+        )
+
+        return new_user, response
 
     async def update_user(self, user: User, user_data: dict, session: AsyncSession):
         for k, v in user_data.items():
@@ -149,7 +210,7 @@ class UserService:
 
         await session.commit()
 
-    async def create_token_pair(user_data: dict, session: AsyncSession) -> dict:
+    async def create_token_pair(self, user_data: dict, session: AsyncSession) -> dict:
         """Create both access and refresh tokens"""
         refresh_token = create_refresh_token(user_data)
 
@@ -157,8 +218,7 @@ class UserService:
         refresh_jti = refresh_payload["jti"]
         expires_at = datetime.fromtimestamp(refresh_payload["exp"])
 
-        user_service = UserService()
-        await user_service.create_outstanding_token(
+        await self.create_outstanding_token(
             user_id=user_data["user_id"],
             jti=refresh_jti,
             expires_at=expires_at,
@@ -168,8 +228,8 @@ class UserService:
         access_token = create_access_token(user_data)
 
         return {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
+            "access": access_token,
+            "refresh": refresh_token,
         }
 
     async def validate_token(self, token: str, session: AsyncSession):

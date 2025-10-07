@@ -58,6 +58,6 @@ admin = Admin(async_engine, title="Devsearch")
 app.include_router(auth_router, prefix=f"/api/{version}/auth", tags=["Auth"])
 
 
-@app.get("/")
-async def root():
-    return {"message": "Welcome to DevSearch API"}
+# @app.get("/")
+# async def root():
+#     return {"message": "Welcome to DevSearch API"}
