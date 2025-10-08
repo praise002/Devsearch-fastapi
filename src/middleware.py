@@ -1,8 +1,10 @@
 import time
 
+from decouple import config
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
 
 def register_middleware(app: FastAPI):
@@ -13,6 +15,11 @@ def register_middleware(app: FastAPI):
         process_time = time.perf_counter() - start_time
         response.headers["X-Process-Time"] = str(process_time)
         return response
+
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=config("SECRET_KEY"),
+    )
 
     origins = ["http://localhost:5173"]
     app.add_middleware(

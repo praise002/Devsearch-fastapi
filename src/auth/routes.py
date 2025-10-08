@@ -9,8 +9,8 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.auth import oauth_config
 from src.auth.dependencies import RefreshTokenBearer, RoleChecker, get_current_user
+from src.auth.oauth_config import oauth
 from src.auth.schemas import (
     OtpVerify,
     PasswordChangeModel,
@@ -678,11 +678,29 @@ async def revoke_all(
     return {"message": "Logged out of all devices successfully"}
 
 
-@router.get("/google", status_code=status.HTTP_200_OK)
+@router.get(
+    "/google",
+    status_code=status.HTTP_302_FOUND,
+    description="""
+    **Google OAuth Authentication**
+    
+    This endpoint initiates Google OAuth authentication flow.
+    
+    Important for API Documentation Users:
+    - This endpoint performs a redirect to Google's authentication page
+    - Redirects do not work properly in Swagger UI/API documentation
+    - To test this endpoint:
+      1. Copy the full URL: `http://127.0.0.1:7000/api/v1/auth/google`
+      2. Paste it directly into your browser address bar
+      3. You will be redirected to Google for authentication
+      4. After authentication, you'll be redirected back to the callback URL
+    """,
+    responses={302: {"description": "Redirect to Google OAuth authorization page"}},
+)
 async def google_auth(request: Request):
     """Redirect user to Google for authorization"""
     redirect_url = config("GOOGLE_REDIRECT_URI")
-    return await oauth_config.google.authorize_redirect(request, redirect_url)
+    return await oauth.google.authorize_redirect(request, redirect_url)
 
 
 @router.get("/google/callback", status_code=status.HTTP_200_OK, include_in_schema=False)

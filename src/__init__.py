@@ -7,6 +7,7 @@ from src.auth.routes import router as auth_router
 from src.db.main import async_engine
 from src.db.models import User
 from src.errors import register_all_errors
+from src.middleware import register_middleware
 
 description = """
 ## Overview
@@ -40,6 +41,8 @@ app = FastAPI(
 )
 
 register_all_errors(app)
+
+register_middleware(app)
 
 templates = Jinja2Templates(directory="templates")
 
