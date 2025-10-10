@@ -47,7 +47,7 @@ mmig-auto:
 	alembic revision --autogenerate
 	
 mig:
-	alembic upgrade heads
+	alembic upgrade head
 
 # initial_data:
 # 	python initials/initial_data.py

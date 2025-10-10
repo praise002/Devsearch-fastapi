@@ -17,12 +17,12 @@ def get_utc_now():
 
 class User(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    first_name: str = Field(max_length=50)
-    last_name: str = Field(max_length=50)
-    username: str = Field(sa_column=Column(String(50), nullable=False, unique=True))
-    email: EmailStr = Field(sa_column=Column(String(50), nullable=False, unique=True))
-    google_id: str = Field(sa_column=Column(String(50), unique=True))
-    auth_provider: str = Field(max_length=50)
+    first_name: str = Field(max_length=50, min_length=1)
+    last_name: str = Field(max_length=50, min_length=1)
+    username: str = Field(sa_column=Column(String(50), nullable=False, unique=True), min_length=1)
+    email: EmailStr = Field(sa_column=Column(String(50), nullable=False, unique=True), min_length=1)
+    google_id: str | None = Field(sa_column=Column(String(50), unique=True), default=None)
+    auth_provider: str | None = Field(max_length=50, default=None, nullable=True)
     # hashed_password: str = Field(exclude=True)
     hashed_password: str | None = Field(default=None, exclude=True, nullable=True)
     is_active: bool = True

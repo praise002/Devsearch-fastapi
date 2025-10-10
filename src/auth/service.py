@@ -5,7 +5,7 @@ from fastapi.responses import RedirectResponse
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.auth.schemas import UserCreate
+from src.auth.schemas import UserCreate, UserCreateOAuth
 from src.auth.utils import (
     create_access_token,
     create_refresh_token,
@@ -45,17 +45,31 @@ class UserService:
         return user is not None
 
     async def create_user(self, user_data: UserCreate, session: AsyncSession):
-        extra_data = {}
-        if user_data.password:
-            extra_data["hashed_password"] = hash_password(user_data.password)
-
-        else:
-            extra_data["hashed_password"] = None
+        extra_data = {
+            "hashed_password": hash_password(user_data.password),
+        }
 
         new_user = User.model_validate(user_data, update=extra_data)
-        
-        if user_data.auth_provider:
-            new_user.is_email_verified = True
+
+        session.add(new_user)
+
+        await session.commit()
+        await session.refresh(new_user)
+
+        profile = Profile(user_id=new_user.id)
+        session.add(profile)
+        await session.commit()
+        await session.refresh(profile)
+
+        return new_user
+
+    async def create_oauth_user(
+        self, user_data: UserCreateOAuth, session: AsyncSession
+    ):
+
+        new_user = User.model_validate(user_data)
+
+        new_user.is_email_verified = True
 
         session.add(new_user)
 
@@ -96,30 +110,39 @@ class UserService:
         user_data = {
             "email": user.email,
             "user_id": str(user.id),
-            "role": user.role,
+            "role": user.role.value,
         }
 
-        return self.create_token_pair(user_data)
+        return await self.create_token_pair(user_data, session)
 
     async def handle_oauth_user_register(
-        self, user_create_data, user_data, session: AsyncSession
+        self, user_create_data: UserCreateOAuth, session: AsyncSession
     ) -> dict:
-        new_user = self.create_user(user_create_data, user_data, session)
-        tokens = self.create_token_pair(user_data)
+        new_user = await self.create_oauth_user(user_create_data, session)
+
+        user_data = {
+            "email": new_user.email,
+            "user_id": str(new_user.id),
+            "role": new_user.role.value,
+        }
+
+        tokens = await self.create_token_pair(user_data, session)
         access = tokens["access"]
         refresh = tokens["refresh"]
 
         frontend_callback_url = config("FRONTEND_CALLBACK_URL")
-        redirect_url = f"{frontend_callback_url}" f"?access={access}&is_new=true"
+        redirect_url = (
+            f"{frontend_callback_url}" f"?access={access}&refresh={refresh}&is_new=true"
+        )
 
         response = RedirectResponse(redirect_url)
-        response.set_cookie(
-            key="refresh",
-            value=refresh,
-            httponly=True,
-            secure=True,  # Ensure you're using HTTPS
-            samesite="None",
-        )
+        # response.set_cookie(
+        #     key="refresh",
+        #     value=refresh,
+        #     httponly=True,
+        #     secure=True,  # Ensure you're using HTTPS
+        #     samesite="None",
+        # )
 
         return new_user, response
 
@@ -139,7 +162,7 @@ class UserService:
         )
         session.add(outstanding_token)
         await session.commit()
-        session.refresh(outstanding_token)
+        await session.refresh(outstanding_token)
         return outstanding_token
 
     async def blacklist_user_token(self, jti: str, session: AsyncSession):

@@ -4,7 +4,7 @@ from datetime import datetime
 from decouple import config
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 from fastapi.exceptions import HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -28,6 +28,7 @@ from src.auth.service import UserService
 from src.auth.utils import (
     ACCESS_TOKEN_EXAMPLE,
     REFRESH_TOKEN_EXAMPLE,
+    UUID_EXAMPLE,
     generate_otp,
     hash_password,
     invalidate_previous_otps,
@@ -44,6 +45,7 @@ from src.errors import (
     InvalidOtp,
     InvalidToken,
     PasswordMismatch,
+    UserAlreadyExists,
     UserNotActive,
     UserNotFound,
 )
@@ -55,6 +57,7 @@ user_service = UserService()
 role_checker = RoleChecker(["admin", "user"])
 REFRESH_TOKEN = Config.REFRESH_TOKEN_EXPIRY
 
+# TODO: RAISEEXCEPTION BUG AND OTHER RAISE BUGS
 
 @router.post(
     "/register",
@@ -70,10 +73,7 @@ async def create_user_account(
     email = user_data.email
     user_exists = await user_service.user_exists(email, session)
     if user_exists:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="User with email already exists.",
-        )
+        raise UserAlreadyExists()
 
     username = user_data.username
     username_exists = await user_service.username_exists(username, session)
@@ -83,7 +83,7 @@ async def create_user_account(
             detail="User with username already exists.",
         )
 
-    new_user = user_service.create_user(user_data, session)
+    new_user = await user_service.create_user(user_data, session)
 
     otp = generate_otp(new_user, session)
     send_email(
@@ -95,6 +95,7 @@ async def create_user_account(
     )
 
     return {
+        "status": "success",
         "message": "Account Created! Check email to verify your account",
         "email": new_user.email,
     }
@@ -138,6 +139,7 @@ async def verify_user_account(
 
     if user.is_email_verified:
         return {
+            "status": "success",
             "message": "Email address already verified. No OTP sent",
         }
 
@@ -154,6 +156,7 @@ async def verify_user_account(
     )
 
     return {
+        "status": "success",
         "message": "Email verified successfully",
     }
 
@@ -310,7 +313,11 @@ async def login_user(
         }
         tokens = user_service.create_token_pair(user_data)
 
-        return {"message": "Login successful", **tokens}  # TODO: USE HTTP-COOKIE LATER
+        return {
+            "status": "success",
+            "message": "Login successful",
+            **tokens,
+        }  # TODO: USE HTTP-COOKIE LATER
 
 
 @router.post(
@@ -358,12 +365,13 @@ async def refresh_token(
             token_details["user"],
         )
 
-        return {"message": "Token refreshed successfully", **new_token}
+        return {
+            "status": "success",
+            "message": "Token refreshed successfully",
+            **new_token,
+        }
 
     raise InvalidToken()
-
-
-UUID_EXAMPLE = "123e4567-e89b-12d3-a456-426614174000"
 
 
 @router.get(
@@ -491,7 +499,7 @@ async def revoke_token(
 ):
     jti = token_details["jti"]
     await user_service.blacklist_user_token(jti, session)
-    return {"message": "Logged Out Successfully"}
+    return {"status": "success", "message": "Logged Out Successfully"}
 
 
 @router.post(
@@ -526,6 +534,7 @@ async def password_reset_request(
     )
 
     return {
+        "status": "success",
         "message": "Please check your email for instructions to reset your password",
     }
 
@@ -576,6 +585,7 @@ async def password_reset_verify_otp(
     )
 
     return {
+        "status": "success",
         "message": "OTP verified, proceed to set a new password",
     }
 
@@ -619,6 +629,7 @@ async def password_reset_done(
     )
 
     return {
+        "status": "success",
         "message": "Your password has been reset, proceed to login",
     }
 
@@ -650,6 +661,7 @@ async def password_change(
     tokens = user_service.create_token_pair(user_data)
 
     return {
+        "status": "success",
         "message": "Password changed successfully",
         **tokens,
     }  # TODO: USE HTTP-COOKIE LATER
@@ -675,7 +687,7 @@ async def revoke_all(
     session: AsyncSession = Depends(get_session),
 ):
     await user_service.blacklist_all_user_tokens(user.id, session)
-    return {"message": "Logged out of all devices successfully"}
+    return {"status": "success", "message": "Logged out of all devices successfully"}
 
 
 @router.get(
@@ -719,35 +731,38 @@ async def google_auth_callback(
         existing_user = await user_service.get_user_by_email(email, session)
 
         if existing_user and existing_user.auth_provider == AUTH_PROVIDER:
-            tokens = user_service.handle_oauth_user_login(existing_user, session)
+            tokens = await user_service.handle_oauth_user_login(existing_user, session)
 
-            return {"message": "Login successful", **tokens}
+            access = tokens["access"]
+            refresh = tokens["refresh"]
+
+            frontend_callback_url = config("FRONTEND_CALLBACK_URL")
+            redirect_url = (
+                f"{frontend_callback_url}"
+                f"?access={access}&refresh={refresh}&is_new=true"
+            )
+            return RedirectResponse(redirect_url)
 
         else:
             first_name = user_info.get("given_name")
             last_name = user_info.get("family_name")
             # download and upload image to cloudinary
             # picture = user_info.get("picture") TODO: LATER
-            # auth_provider = user_info.get("iss")
+            auth_provider = user_info.get("iss")
+            print(auth_provider)
             google_id = user_info.get("sub")
             username = email.split("@")[0]
-            user_create_data = {
-                "first_name": first_name,
-                "last_name": last_name,
-                "username": username,
-                "email": email,
-                "google_id": google_id,
-                "auth_provider": AUTH_PROVIDER,
-            }
+            user_create_obj = UserCreate(
+                first_name=first_name,
+                last_name=last_name,
+                username=username,
+                email=email,
+                google_id=google_id,
+                auth_provider=AUTH_PROVIDER,
+            )
 
-            user_data = {
-                "email": new_user.email,
-                "user_id": str(new_user.id),
-                "role": new_user.role,
-            }
-
-            new_user, response = user_service.handle_oauth_user_register(
-                user_create_data, user_data, session
+            new_user, response = await user_service.handle_oauth_user_register(
+                user_create_obj, session
             )
 
             send_email(
@@ -761,7 +776,7 @@ async def google_auth_callback(
             return response
 
     except Exception as e:
-        logging.exception(e)
+        logging.exception(f"Google authentication failed: {str(e)}")
         raise GoogleAuthenticationFailed()
 
 

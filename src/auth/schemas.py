@@ -24,21 +24,16 @@ class UserInDB(UserBase):
 
 class UserCreate(UserBase):
     password: str | None = None
+
+
+class UserCreateOAuth(UserBase):
     auth_provider: str | None = None
     google_id: str | None = None
-
-    @model_validator(mode="after")
-    def validate_password_or_provider(self) -> Self:
-        # Require password for regular signup, but not for OAuth
-        if not self.auth_provider and not self.password:
-            raise ValueError("Password is required")
-
-        return self
 
 
 class OtpVerify(BaseModel):
     email: EmailStr
-    otp: int
+    otp: int = Field(examples=[123456])
 
     @field_validator("otp", mode="after")
     @classmethod
@@ -92,6 +87,7 @@ class UserResponse(BaseModel):
 
 
 class UserRegistrationResponse(BaseModel):
+    status: str = "success"
     email: EmailStr
     message: str = "Account Created! Check email to verify your account"
 
