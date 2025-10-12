@@ -57,7 +57,7 @@ user_service = UserService()
 role_checker = RoleChecker(["admin", "user"])
 REFRESH_TOKEN = Config.REFRESH_TOKEN_EXPIRY
 
-# TODO: RAISEEXCEPTION BUG AND OTHER RAISE BUGS
+# TODO: ADD MORE EXAMPLES
 
 @router.post(
     "/register",

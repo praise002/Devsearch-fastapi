@@ -254,31 +254,31 @@ class UserNotFound(BaseException):
     pass
 
 
-class AccountNotVerified(Exception):
+class AccountNotVerified(BaseException):
     """Account not yet verified"""
 
     pass
 
 
-class UserNotActive(Exception):
+class UserNotActive(BaseException):
     """User not active"""
 
     pass
 
 
-class PasswordMismatch(Exception):
+class PasswordMismatch(BaseException):
     """New password and confirm password deosn't match"""
 
     pass
 
 
-class InvalidOldPassword(Exception):
+class InvalidOldPassword(BaseException):
     """Invalid old password"""
 
     pass
 
 
-class GoogleAuthenticationFailed(Exception):
+class GoogleAuthenticationFailed(BaseException):
     """Google authentication failed"""
 
     pass
@@ -289,3 +289,5 @@ def create_exception_handler(
 ) -> Callable[[Request, Exception], JSONResponse]:
     async def exception_handler(request: Request, exc: BaseException):
         return JSONResponse(content=initial_detail, status_code=status_code)
+    
+    return exception_handler
