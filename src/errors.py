@@ -17,6 +17,18 @@ def register_all_errors(app: FastAPI):
             },
         ),
     )
+    
+    app.add_exception_handler(
+        UsernameAlreadyExists,
+        create_exception_handler(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            initial_detail={
+                "status": "failure",
+                "message": "User with username already exists.",
+                "err_code": "username_exists",
+            },
+        ),
+    )
 
     app.add_exception_handler(
         UserNotFound,
@@ -232,6 +244,11 @@ class RefreshTokenRequired(BaseException):
 
 class UserAlreadyExists(BaseException):
     """User has provided an email for a user who exists during sign up"""
+
+    pass
+
+class UsernameAlreadyExists(BaseException):
+    """Username exists"""
 
     pass
 

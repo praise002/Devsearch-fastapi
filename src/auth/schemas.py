@@ -1,3 +1,4 @@
+import re
 from typing import Self
 from uuid import UUID
 
@@ -23,7 +24,24 @@ class UserInDB(UserBase):
 
 
 class UserCreate(UserBase):
-    password: str | None = None
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("password", mode="after")
+    @classmethod
+    def validate_new_password(cls, value: str) -> str:
+
+        if not re.match(
+            r"^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*()-+]).{8,}$",
+            value,
+        ):
+            raise ValueError(
+                "This password must contain at least 8 characters, one uppercase letter, one lowercase letter, one digit and one symbol."
+            )
+        # TODO: ADD MORE TO THE LIST
+        if value.lower() in ["password", "123456789", "qwerty123", "admin123"]:
+            raise ValueError("Password is too common. Choose a stronger password")
+
+        return value
 
 
 class UserCreateOAuth(UserBase):
@@ -94,7 +112,7 @@ class UserRegistrationResponse(BaseModel):
 
 class UserLoginModel(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=6)
+    password: str = Field(min_length=8)
 
 
 class TokenResponse(BaseModel):
@@ -120,6 +138,23 @@ class PasswordResetConfirmModel(BaseModel):
     new_password: str
     confirm_new_password: str
 
+    @field_validator("new_password", mode="after")
+    @classmethod
+    def validate_new_password(cls, value: str) -> str:
+
+        if not re.match(
+            r"^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*()-+]).{8,}$",
+            value,
+        ):
+            raise ValueError(
+                "This password must contain at least 8 characters, one uppercase letter, one lowercase letter, one digit and one symbol."
+            )
+        # TODO: ADD MORE TO THE LIST
+        if value.lower() in ["password", "123456789", "qwerty123", "admin123"]:
+            raise ValueError("Password is too common. Choose a stronger password")
+
+        return value
+
     @model_validator(mode="after")
     def check_passwords_match(self) -> Self:
         if self.new_password != self.confirm_new_password:
@@ -131,6 +166,21 @@ class PasswordChangeModel(BaseModel):
     old_password: str
     new_password: str
     confirm_new_password: str
+
+    @field_validator("new_password", mode="after")
+    @classmethod
+    def validate_new_password(cls, value: str) -> str:
+        if not re.match(
+            r"^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*()-+]).{8,}$", value
+        ):
+            raise ValueError(
+                "This password must contain at least 8 characters, one uppercase letter, one lowercase letter, one digit and one symbol."
+            )
+        # TODO: ADD MORE TO THE LIST
+        if value.lower() in ["password", "123456789", "qwerty123", "admin123"]:
+            raise ValueError("Password is too common. Choose a stronger password")
+
+        return value
 
     @model_validator(mode="after")
     def check_passwords_match(self) -> Self:

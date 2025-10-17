@@ -11,6 +11,20 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.auth.dependencies import RefreshTokenBearer, RoleChecker, get_current_user
 from src.auth.oauth_config import oauth
+from src.auth.schema_examples import (
+    GET_USER_PROFILE_RESPONSES,
+    LOGIN_RESPONSES,
+    LOGOUT_ALL_RESPONSES,
+    LOGOUT_RESPONSES,
+    PASSWORD_CHANGE_RESPONSES,
+    PASSWORD_RESET_COMPLETE_RESPONSES,
+    PASSWORD_RESET_REQUEST_RESPONSES,
+    PASSWORD_RESET_VERIFY_RESPONSES,
+    REFRESH_TOKEN_RESPONSES,
+    REGISTER_RESPONSES,
+    RESEND_OTP_RESPONSES,
+    VERIFY_EMAIL_RESPONSES,
+)
 from src.auth.schemas import (
     OtpVerify,
     PasswordChangeModel,
@@ -26,9 +40,6 @@ from src.auth.schemas import (
 )
 from src.auth.service import UserService
 from src.auth.utils import (
-    ACCESS_TOKEN_EXAMPLE,
-    REFRESH_TOKEN_EXAMPLE,
-    UUID_EXAMPLE,
     generate_otp,
     hash_password,
     invalidate_previous_otps,
@@ -46,6 +57,7 @@ from src.errors import (
     InvalidToken,
     PasswordMismatch,
     UserAlreadyExists,
+    UsernameAlreadyExists,
     UserNotActive,
     UserNotFound,
 )
@@ -59,11 +71,13 @@ REFRESH_TOKEN = Config.REFRESH_TOKEN_EXPIRY
 
 # TODO: ADD MORE EXAMPLES
 
+
 @router.post(
     "/register",
     status_code=status.HTTP_201_CREATED,
     response_model=UserRegistrationResponse,
     description="This endpoint registers new users into our application",
+    responses=REGISTER_RESPONSES,
 )
 async def create_user_account(
     user_data: UserCreate,
@@ -78,10 +92,7 @@ async def create_user_account(
     username = user_data.username
     username_exists = await user_service.username_exists(username, session)
     if username_exists:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="User with username already exists.",
-        )
+        raise UsernameAlreadyExists()
 
     new_user = await user_service.create_user(user_data, session)
 
@@ -105,17 +116,7 @@ async def create_user_account(
     "/verification/verify",
     status_code=status.HTTP_200_OK,
     description="This endpoint verifies a user's email",
-    responses={
-        200: {
-            "content": {
-                "application/json": {
-                    "example": {
-                        "message": "Email verified successfully",
-                    }
-                }
-            },
-        }
-    },
+    responses=VERIFY_EMAIL_RESPONSES,
 )
 async def verify_user_account(
     data: OtpVerify,
@@ -165,30 +166,7 @@ async def verify_user_account(
     "/verification",
     status_code=status.HTTP_200_OK,
     description="This endpoint sends OTP to a user's email for verification",
-    responses={
-        200: {
-            "content": {
-                "application/json": {
-                    "examples": {
-                        "OtpResent": {
-                            "summary": "OTP Resent Successful",
-                            "value": {
-                                "status": "success",
-                                "message": "OTP sent successfully",
-                            },
-                        },
-                        "EmailVerified": {
-                            "summary": "Email already verified",
-                            "value": {
-                                "status": "success",
-                                "message": "Email address already verified. No OTP sent",
-                            },
-                        },
-                    }
-                }
-            },
-        }
-    },
+    responses=RESEND_OTP_RESPONSES,
 )
 async def resend_verification_email(
     data: SendOtp,
@@ -227,54 +205,7 @@ async def resend_verification_email(
     "/token",
     status_code=status.HTTP_200_OK,
     description="This endpoint generates new access and refresh tokens for authentication",
-    responses={
-        200: {
-            "content": {
-                "application/json": {
-                    "example": {
-                        "message": "Login successful",
-                        "access_token": ACCESS_TOKEN_EXAMPLE,
-                        "refresh_token": REFRESH_TOKEN_EXAMPLE,
-                    }
-                }
-            },
-        },
-        401: {
-            "content": {
-                "application/json": {
-                    "example": {
-                        "status": "failure",
-                        "message": "No active account found with the given credentials",
-                        "error_code": "unauthorized",
-                    }
-                }
-            },
-        },
-        403: {
-            "content": {
-                "application/json": {
-                    "examples": {
-                        "EmailNotVerified": {
-                            "summary": "Email not verified",
-                            "value": {
-                                "status": "failure",
-                                "message": "Email not verified. Please verify your email before logging in",
-                                "error_code": "forbidden",
-                            },
-                        },
-                        "AccountDisabled": {
-                            "summary": "Account disabled",
-                            "value": {
-                                "status": "failure",
-                                "message": "Your account has been disabled. Please contact support for assistance",
-                                "error_code": "forbidden",
-                            },
-                        },
-                    }
-                }
-            },
-        },
-    },
+    responses=LOGIN_RESPONSES,
 )
 async def login_user(
     login_data: UserLoginModel, session: AsyncSession = Depends(get_session)
@@ -324,31 +255,7 @@ async def login_user(
     "/token/refresh",
     status_code=status.HTTP_200_OK,
     description="This endpoint allows users to refresh their access token using a valid refresh token. It returns a new access and refresh token, which can be used for further authenticated requests.",
-    responses={
-        200: {
-            "content": {
-                "application/json": {
-                    "example": {
-                        "message": "Token refreshed successfully",
-                        "access_token": ACCESS_TOKEN_EXAMPLE,
-                        "refresh_token": REFRESH_TOKEN_EXAMPLE,
-                    }
-                }
-            },
-        },
-        401: {
-            "content": {
-                "application/json": {
-                    "example": {
-                        "status": "failure",
-                        "message": "Invalid token or token expired.",
-                        "resolution": "Please get a new token",
-                        "error_code": "invalid_token",
-                    }
-                }
-            }
-        },
-    },
+    responses=REFRESH_TOKEN_RESPONSES,
 )
 async def refresh_token(
     session: AsyncSession = Depends(get_session),
@@ -379,59 +286,7 @@ async def refresh_token(
     status_code=status.HTTP_200_OK,
     response_model=UserResponse,
     description="This endpoint returns the authenticated user's profile information.",
-    responses={
-        200: {
-            "content": {
-                "application/json": {
-                    "example": {
-                        "id": UUID_EXAMPLE,
-                        "email": "user@example.com",
-                        "first_name": "John",
-                        "last_name": "Doe",
-                        "username": "johndoe",
-                        "short_intro": "Full-stack developer passionate about building scalable web applications",
-                        "bio": "I'm a software engineer with 5+ years of experience in Python, JavaScript, and cloud technologies. I love contributing to open-source projects and mentoring junior developers.",
-                        "location": "San Francisco, CA",
-                        "avatar_url": "https://example.com/avatars/johndoe.jpg",
-                        "github": "https://github.com/johndoe",
-                        "stack_overflow": "https://stackoverflow.com/users/12345/johndoe",
-                        "tw": "https://twitter.com/johndoe",
-                        "ln": "https://linkedin.com/in/johndoe",
-                        "website": "https://johndoe.dev",
-                        "skills": [
-                            {
-                                "id": UUID_EXAMPLE,
-                                "name": "Python",
-                                "description": "Expert level proficiency in Python development",
-                            },
-                            {
-                                "id": UUID_EXAMPLE,
-                                "name": "FastAPI",
-                                "description": "Advanced knowledge of FastAPI framework",
-                            },
-                            {
-                                "id": UUID_EXAMPLE,
-                                "name": "React",
-                                "description": "Intermediate level React development skills",
-                            },
-                        ],
-                    }
-                }
-            }
-        },
-        401: {
-            "content": {
-                "application/json": {
-                    "example": {
-                        "status": "failure",
-                        "message": "Please provide a valid access token.",
-                        "resolution": "Please get an access token",
-                        "error_code": "access_token_required",
-                    }
-                }
-            }
-        },
-    },
+    responses=GET_USER_PROFILE_RESPONSES,
 )
 async def get_current_user_endpoint(
     current_user=Depends(get_current_user),
@@ -481,17 +336,7 @@ async def get_current_user_endpoint(
 @router.post(
     "/logout",
     status_code=status.HTTP_200_OK,
-    responses={
-        200: {
-            "content": {
-                "application/json": {
-                    "example": {
-                        "message": "Logged Out successfully",
-                    }
-                }
-            },
-        }
-    },
+    responses=LOGOUT_RESPONSES,
 )
 async def revoke_token(
     token_details: dict = Depends(RefreshTokenBearer()),
@@ -505,17 +350,7 @@ async def revoke_token(
 @router.post(
     "/passwords/reset",
     status_code=status.HTTP_200_OK,
-    responses={
-        200: {
-            "content": {
-                "application/json": {
-                    "example": {
-                        "message": "Please check your email for instructions to reset your password",
-                    }
-                }
-            },
-        }
-    },
+    responses=PASSWORD_RESET_REQUEST_RESPONSES,
 )
 async def password_reset_request(
     email_data: PasswordResetModel,
@@ -523,7 +358,19 @@ async def password_reset_request(
     session: AsyncSession = Depends(get_session),
 ):
     email = email_data.email
-    user = UserService.get_user_by_email(email)
+    user = await UserService.get_user_by_email(email, session)
+    if not user:
+        # silently pass due to security reasons
+        logging.warning(
+            f"Password reset attempted on non-existent account",
+            extra={
+                "event_type": "password_reset_invalid_email",
+                "email": email,
+                "client_ip": "",
+                "user_agent": "",
+            },
+        )
+
     otp = generate_otp(user, session)
     send_email(
         background_tasks,
@@ -533,26 +380,17 @@ async def password_reset_request(
         "password_reset_email.html",
     )
 
+    # ALWAYS return the same message
     return {
         "status": "success",
-        "message": "Please check your email for instructions to reset your password",
+        "message": "If that email address is in our database, we will send you an email to reset your password",
     }
 
 
 @router.get(
     "/passwords/reset/verify",
     status_code=status.HTTP_200_OK,
-    responses={
-        200: {
-            "content": {
-                "application/json": {
-                    "example": {
-                        "message": "OTP verified, proceed to set a new password",
-                    }
-                }
-            },
-        }
-    },
+    responses=PASSWORD_RESET_VERIFY_RESPONSES,
 )
 async def password_reset_verify_otp(
     data: PasswordResetVerifyOtpModel,
@@ -593,17 +431,7 @@ async def password_reset_verify_otp(
 @router.get(
     "/passwords/reset/complete",
     status_code=status.HTTP_200_OK,
-    responses={
-        200: {
-            "content": {
-                "application/json": {
-                    "example": {
-                        "message": "Your password has been reset, proceed to login",
-                    }
-                }
-            },
-        }
-    },
+    responses=PASSWORD_RESET_COMPLETE_RESPONSES,
 )
 async def password_reset_done(
     data: PasswordResetConfirmModel,
@@ -634,7 +462,11 @@ async def password_reset_done(
     }
 
 
-@router.post("/passwords/change", status_code=status.HTTP_200_OK)
+@router.post(
+    "/passwords/change",
+    status_code=status.HTTP_200_OK,
+    responses=PASSWORD_CHANGE_RESPONSES,
+)
 async def password_change(
     data: PasswordChangeModel,
     current_user=Depends(get_current_user),
@@ -670,17 +502,7 @@ async def password_change(
 @router.post(
     "/logout/all",
     status_code=status.HTTP_200_OK,
-    responses={
-        200: {
-            "content": {
-                "application/json": {
-                    "example": {
-                        "message": "Logged out of all devices successfully",
-                    }
-                }
-            },
-        }
-    },
+    responses=LOGOUT_ALL_RESPONSES,
 )
 async def revoke_all(
     user=Depends(get_current_user),
