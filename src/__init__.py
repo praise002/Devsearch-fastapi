@@ -1,6 +1,8 @@
+import jinja2
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.templating import Jinja2Templates
 from starlette_admin.contrib.sqla import Admin, ModelView
 
 from src.auth.routes import router as auth_router
@@ -44,7 +46,11 @@ register_all_errors(app)
 
 register_middleware(app)
 
-templates = Jinja2Templates(directory="templates")
+
+env = jinja2.Environment(loader=jinja2.FileSystemLoader("templates"))
+templates = Jinja2Templates(env=env)
+
+# templates = Jinja2Templates(directory="templates")
 
 
 app.mount("/static", StaticFiles(directory="static"), name="static")

@@ -2,7 +2,7 @@ import re
 from typing import Self
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
 class UserBase(BaseModel):
@@ -75,8 +75,8 @@ class SkillResponse(BaseModel):
     name: str
     description: str | None = None
 
-    class Config:
-        from_attributes = True
+    
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserResponse(BaseModel):
@@ -100,8 +100,8 @@ class UserResponse(BaseModel):
 
     skills: list[SkillResponse] = []
 
-    class Config:
-        from_attributes = True
+    
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserRegistrationResponse(BaseModel):

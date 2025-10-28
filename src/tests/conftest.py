@@ -1,39 +1,367 @@
-from unittest.mock import Mock
+import asyncio
+from typing import AsyncGenerator
 
 import pytest
-from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
+from sqlmodel import SQLModel
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src import app
-from src.auth.dependencies import AccessTokenBearer, RefreshTokenBearer, RoleChecker
+from src.auth.schemas import UserCreate
 from src.db.main import get_session
+from faker import Faker
 
-mock_session = Mock()
-mock_user_service = Mock()
+def pytest_configure(config):
+    """
+    Configure pytest markers and settings.
+    """
+    config.addinivalue_line("markers", "asyncio: mark test as an asyncio test")
 
 
-def get_mock_session():
-    yield mock_session
+@pytest.fixture(scope="session")
+def event_loop():
+    """
+    Creates an event loop for the entire test session.
+    """
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
 
 
-access_token_bearer = AccessTokenBearer()
-refresh_token_bearer = RefreshTokenBearer()
-role_checker = RoleChecker(["user"])
+@pytest.fixture(scope="session")
+def postgresql_proc_config():
+    """
+    Configure how pytest-postgresql starts the PostgreSQL process.
+    """
+    return {
+        "port": None,  # 5433
+        "host": "localhost",
+        "user": "postgres",
+        "password": "",
+        "options": "-c fsync=off",  # Faster for testing (disables some safety checks)
+    }
 
-app.dependency_overrides[get_session] = get_mock_session
-app.dependency_overrides[role_checker] = Mock()
-app.dependency_overrides[refresh_token_bearer] = Mock()
+
+@pytest.fixture(scope="session")
+async def database_url(postgresql_proc):
+    """
+    Constructs the async database URL for the temporary database and creates it.
+    """
+    from sqlalchemy_utils import create_database, database_exists
+
+    # Extract connection details from postgresql_proc fixture
+    user = postgresql_proc.user
+    host = postgresql_proc.host
+    port = postgresql_proc.port
+    dbname = postgresql_proc.dbname
+    password = postgresql_proc.password if hasattr(postgresql_proc, "password") else ""
+
+    # Construct sync URL for database creation
+    sync_url = (
+        f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
+        if password
+        else f"postgresql://{user}@{host}:{port}/{dbname}"
+    )
+
+    # Create the database if it doesn't exist
+    if not database_exists(sync_url):
+        create_database(sync_url)
+
+    # Construct and return async URL for the engine
+    async_url = (
+        f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{dbname}"
+        if password
+        else f"postgresql+asyncpg://{user}@{host}:{port}/{dbname}"
+    )
+
+    return async_url
+
+
+@pytest.fixture(scope="session")
+async def test_engine(database_url, event_loop):
+    """
+    Creates async SQLAlchemy engine connected to temporary database.
+
+    Args:
+        database_url: URL from database_url fixture
+        event_loop: Event loop for async operations
+
+    Returns:
+        AsyncEngine: SQLAlchemy async engine
+    """
+    # Create async engine
+    engine = create_async_engine(
+        database_url,
+        echo=False,  # Set to True to see SQL queries (useful for debugging)
+        poolclass=NullPool,  # Don't pool connections in tests
+        future=True,
+    )
+
+    # Create all tables before tests
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+
+    yield engine
+
+    # Drop all tables after all tests
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.drop_all)
+
+    # Dispose engine
+    await engine.dispose()
+
+
+@pytest.fixture(scope="function")
+async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
+    """
+    Creates a fresh database session for each test.
+
+
+
+    Args:
+        test_engine: The async engine from test_engine fixture
+
+    Yields:
+        AsyncSession: Database session for the test
+    """
+    # Create session factory
+    async_session_maker = async_sessionmaker(
+        test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    # Create session
+    async with async_session_maker() as session:
+        yield session
+        # Rollback happens automatically when exiting this block
+        await session.rollback()
 
 
 @pytest.fixture
-def fake_session():
-    return mock_session
+async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+    """
+    Creates an async HTTP client for testing API endpoints.
+
+
+
+    Args:
+        db_session: Database session from db_session fixture
+
+    Yields:
+        AsyncClient: HTTP client for making requests
+    """
+
+    # Override the database dependency
+    async def override_get_session():
+        yield db_session
+
+    app.dependency_overrides[get_session] = override_get_session
+
+    # Create async client
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://localhost",
+    ) as client:
+        yield client
+
+    # Clean up
+    app.dependency_overrides.clear()
+
+
+# TODO: NOT CERTAIN OF MONKEYPATCH YET
+@pytest.fixture
+def mock_email(monkeypatch):
+    """
+    Mocks the send_email function to prevent real emails during tests.
+
+
+
+    Returns:
+        list: List of "sent" emails that can be verified in tests
+    """
+    sent_emails = []
+
+    def fake_send_email(
+        background_tasks,
+        subject: str,
+        email_to: str,
+        template_context: dict,
+        template_name: str,
+    ):
+        """Fake send_email that stores email details."""
+        sent_emails.append(
+            {
+                "subject": subject,
+                "email_to": email_to,
+                "template_context": template_context,
+                "template_name": template_name,
+            }
+        )
+
+    # Mock send_email where it's USED (in routes), not where it's defined
+    from src.auth import routes
+
+    monkeypatch.setattr(routes, "send_email", fake_send_email)
+
+    return sent_emails
+
+
+# TODO: NOT CERTAIN OF MONKEYPATCH YET
+@pytest.fixture
+def mock_otp(monkeypatch):
+    """
+    Mocks OTP generation to return predictable test value.
+
+
+
+    Returns:
+        int: The predictable OTP that will be "generated"
+    """
+
+    def fake_generate_otp(user, session):
+        return 123456
+
+    from src.auth import routes
+
+    monkeypatch.setattr(routes, "generate_otp", fake_generate_otp)
+
+    return 123456
 
 
 @pytest.fixture
-def fake_user_service():
-    return mock_user_service
+def valid_user_data():
+    """
+    Provides valid user registration data.
+
+    Returns:
+        dict: Valid user registration data
+    """
+    return {
+        "email": "test@example.com",
+        "username": "testuser",
+        "first_name": "Test",
+        "last_name": "User",
+        "password": "SecurePass123!",
+    }
 
 
 @pytest.fixture
-def test_client():
-    return TestClient(app)
+def another_user_data():
+    """
+    Provides different user data for testing multiple users.
+
+    Returns:
+        dict: Another set of valid user data
+    """
+    return {
+        "email": "another@example.com",
+        "username": "anotheruser",
+        "first_name": "Another",
+        "last_name": "User",
+        "password": "AnotherPass123!",
+    }
+
+
+@pytest.fixture
+def user2_data(faker: Faker):
+    return {
+        "email": faker.email(),
+        "username": faker.user_name(),
+        "first_name": faker.first_name(),
+        "last_name": faker.last_name(),
+        "password": "SecurePass123!",
+    }
+    
+@pytest.fixture
+def user3_data(faker: Faker):
+    return {
+        "email": faker.email(),
+        "username": faker.user_name(),
+        "first_name": faker.first_name(),
+        "last_name": faker.last_name(),
+        "password": "SecurePass123!",
+    }
+
+
+@pytest.fixture
+def invalid_user_data():
+    return {
+        "email": "invalid-email",
+        "username": "testuser",
+        "first_name": "Test",
+        "last_name": "User",
+        "password": "SecurePass123!",
+    }
+
+
+@pytest.fixture
+def weak_password_data():
+    return {
+        "email": "test@example.com",
+        "username": "testuser",
+        "first_name": "Test",
+        "last_name": "User",
+        "password": "123",
+    }
+
+
+@pytest.fixture
+async def registered_user(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    user2_data: dict,
+):
+    """
+    Creates a registered but unverified user for testing.
+    """
+    from src.auth.service import UserService
+
+    user_service = UserService()
+    user_create = UserCreate(**user2_data)
+    user = await user_service.create_user(user_create, db_session)
+    return user
+
+
+@pytest.fixture
+async def verified_user(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    user3_data: dict,
+):
+    """
+    Creates a verified user for testing.
+    """
+    from src.auth.service import UserService
+
+    user_service = UserService()
+    user_create = UserCreate(**user3_data)
+    user = await user_service.create_user(user_create, db_session)
+
+    await user_service.update_user(user, {"is_email_verified": True}, db_session)
+    return user
+
+
+@pytest.fixture
+async def otp_for_user(
+    db_session: AsyncSession,
+    registered_user,
+    mock_otp: str,
+):
+    """
+    Creates a valid OTP for a user.
+    """
+
+    from src.db.models import Otp
+
+    # Create OTP record directly
+    otp_record = Otp(user_id=registered_user.id, otp=mock_otp, is_valid=True)
+    db_session.add(otp_record)
+    await db_session.commit()
+
+    return mock_otp
+
+
+# TODO: SWITCH TO KAY APPROACH LATER

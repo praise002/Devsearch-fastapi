@@ -123,7 +123,7 @@ class Otp(SQLModel, table=True):
         expiration_time = self.created_at + timedelta(
             minutes=Config.EMAIL_OTP_EXPIRE_MINUTES
         )
-        return timezone.now() < expiration_time
+        return get_utc_now() < expiration_time
 
     def __str__(self):
         return self.otp

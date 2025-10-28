@@ -87,19 +87,19 @@ def decode_token(token: str) -> dict:
         return None
 
 
-def invalidate_previous_otps(user, session):
+async def invalidate_previous_otps(user, session):
     statement = select(Otp).where(Otp.user_id == user.id)
-    results = session.exec(statement).all()
-    for otp in results:
+    results = await session.exec(statement)
+    for otp in results.all():
         session.delete(otp)
     session.commit()
 
 
-def generate_otp(user, session):
+async def generate_otp(user, session):
     otp_value = random.randint(100000, 999999)
     # Save the OTP to the Otp model
     otp = Otp(user_id=user.id, otp=otp_value)
     session.add(otp)
-    session.commit()
-    session.refresh(otp)
-    return otp_value
+    await session.commit()
+    await session.refresh(otp)
+    return otp.otp

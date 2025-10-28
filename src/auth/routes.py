@@ -69,8 +69,6 @@ user_service = UserService()
 role_checker = RoleChecker(["admin", "user"])
 REFRESH_TOKEN = Config.REFRESH_TOKEN_EXPIRY
 
-# TODO: ADD MORE EXAMPLES
-
 
 @router.post(
     "/register",
@@ -132,8 +130,8 @@ async def verify_user_account(
     if not user:
         raise UserNotFound()
 
-    otp_record = await user_service.get_otp_by_user(user_id, otp, session)
     user_id = user.id
+    otp_record = await user_service.get_otp_by_user(user_id, otp, session)
 
     if not otp_record or not otp_record.is_valid:
         raise InvalidOtp()
@@ -600,6 +598,3 @@ async def google_auth_callback(
     except Exception as e:
         logging.exception(f"Google authentication failed: {str(e)}")
         raise GoogleAuthenticationFailed()
-
-
-#  user_info = await oauth.google.parse_id_token(request, token)
