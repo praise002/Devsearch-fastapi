@@ -23,6 +23,7 @@ serv:
 
 create_env:
 	python3.12 -m venv venv
+# 	python3 -m venv .venv
 
 # act:  # doesn't work
 # 	source venv/bin/activate
@@ -67,3 +68,4 @@ random_s:
 
 # # Run with coverage
 # pytest tests/test_auth/test_register.py --cov=src.auth --cov-report=html
+# which python

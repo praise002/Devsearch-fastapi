@@ -12,7 +12,7 @@ def register_all_errors(app: FastAPI):
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             initial_detail={
                 "status": "failure",
-                "message": "User with email already exists.",
+                "message": "User with email already exists",
                 "err_code": "user_exists",
             },
         ),
@@ -24,7 +24,7 @@ def register_all_errors(app: FastAPI):
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             initial_detail={
                 "status": "failure",
-                "message": "User with username already exists.",
+                "message": "User with username already exists",
                 "err_code": "username_exists",
             },
         ),
@@ -36,7 +36,7 @@ def register_all_errors(app: FastAPI):
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             initial_detail={
                 "status": "failure",
-                "message": "User not found.",
+                "message": "User not found",
                 "err_code": "user_not_found",
             },
         ),
@@ -48,8 +48,8 @@ def register_all_errors(app: FastAPI):
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             initial_detail={
                 "status": "failure",
-                "message": "Invalid email or password.",
-                "error_code": "invalid_email_or_password",
+                "message": "Invalid email or password",
+                "err_code": "invalid_email_or_password",
             },
         ),
     )
@@ -60,9 +60,10 @@ def register_all_errors(app: FastAPI):
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             initial_detail={
                 "status": "failure",
-                "message": "Invalid otp or otp expired.",
+                # "message": "Invalid otp or otp expired",
+                "message": "Invalid OTP",
                 "resolution": "Please get a new otp",
-                "error_code": "invalid_otp",
+                "err_code": "invalid_otp",
             },
         ),
     )
@@ -73,9 +74,9 @@ def register_all_errors(app: FastAPI):
             status_code=status.HTTP_401_UNAUTHORIZED,
             initial_detail={
                 "status": "failure",
-                "message": "Invalid token or token expired.",
+                "message": "Invalid token or token expired",
                 "resolution": "Please get a new token",
-                "error_code": "invalid_token",
+                "err_code": "invalid_token",
             },
         ),
     )
@@ -86,9 +87,9 @@ def register_all_errors(app: FastAPI):
             status_code=status.HTTP_401_UNAUTHORIZED,
             initial_detail={
                 "status": "failure",
-                "message": "Google authentication failed.",
+                "message": "Google authentication failed",
                 "resolution": "Please get a new token",
-                "error_code": "google_auth_failed",
+                "err_code": "google_auth_failed",
             },
         ),
     )
@@ -99,9 +100,9 @@ def register_all_errors(app: FastAPI):
             status_code=status.HTTP_401_UNAUTHORIZED,
             initial_detail={
                 "status": "failure",
-                "message": "Token is invalid or has been revoked.",
+                "message": "Token is invalid or has been revoked",
                 "resolution": "Please get a new token",
-                "error_code": "token_revoked",
+                "err_code": "token_revoked",
             },
         ),
     )
@@ -112,9 +113,9 @@ def register_all_errors(app: FastAPI):
             status_code=status.HTTP_401_UNAUTHORIZED,
             initial_detail={
                 "status": "failure",
-                "message": "Please provide a valid access token.",
+                "message": "Please provide a valid access token",
                 "resolution": "Please get an access token",
-                "error_code": "access_token_required",
+                "err_code": "access_token_required",
             },
         ),
     )
@@ -125,9 +126,9 @@ def register_all_errors(app: FastAPI):
             status_code=status.HTTP_401_UNAUTHORIZED,
             initial_detail={
                 "status": "failure",
-                "message": "Please provide a valid refresh token.",
+                "message": "Please provide a valid refresh token",
                 "resolution": "Please get a refresh token",
-                "error_code": "refresh_token_required",
+                "err_code": "refresh_token_required",
             },
         ),
     )
@@ -138,9 +139,9 @@ def register_all_errors(app: FastAPI):
             status_code=status.HTTP_403_FORBIDDEN,
             initial_detail={
                 "status": "failure",
-                "message": "You do not have sufficient permissions to perform this action.",
-                "resolution": "Please check your permissions or contact an administrator.",
-                "error_code": "insufficient_permission",
+                "message": "You do not have sufficient permissions to perform this action",
+                "resolution": "Please check your permissions or contact an administrator",
+                "err_code": "insufficient_permission",
             },
         ),
     )
@@ -152,8 +153,8 @@ def register_all_errors(app: FastAPI):
             initial_detail={
                 "status": "failure",
                 "message": "Account not verified.",
-                "resolution": "Please check your email for verification details.",
-                "error_code": "account_not_verified",
+                "resolution": "Please check your email for verification details",
+                "err_code": "account_not_verified",
             },
         ),
     )
@@ -165,7 +166,7 @@ def register_all_errors(app: FastAPI):
             initial_detail={
                 "status": "failure",
                 "message": "Your account has been disabled. Please contact support for assistance",
-                "error_code": "forbidden",
+                "err_code": "forbidden",
             },
         ),
     )
@@ -176,8 +177,8 @@ def register_all_errors(app: FastAPI):
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             initial_detail={
                 "status": "failure",
-                "message": "New password and confirm password do not match.",
-                "error_code": "password_mismatch",
+                "message": "New password and confirm password do not match",
+                "err_code": "password_mismatch",
             },
         ),
     )
@@ -188,8 +189,8 @@ def register_all_errors(app: FastAPI):
             status_code=status.HTTP_401_UNAUTHORIZED,
             initial_detail={
                 "status": "failure",
-                "message": "Invalid old password.",
-                "error_code": "invalid_old_password",
+                "message": "Invalid old password",
+                "err_code": "invalid_old_password",
             },
         ),
     )
@@ -200,7 +201,7 @@ def register_all_errors(app: FastAPI):
             content={
                 "status": "failure",
                 "message": "Ooops! Something went wrong",
-                "error_code": "server_error",
+                "err_code": "server_error",
             },
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )

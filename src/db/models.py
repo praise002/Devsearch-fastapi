@@ -125,8 +125,8 @@ class Otp(SQLModel, table=True):
         )
         return get_utc_now() < expiration_time
 
-    def __str__(self):
-        return self.otp
+    def __repr__(self):
+        return str(self.otp)
 
 
 class Skill(SQLModel, table=True):

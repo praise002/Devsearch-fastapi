@@ -139,12 +139,12 @@ async def verify_user_account(
     if user.is_email_verified:
         return {
             "status": "success",
-            "message": "Email address already verified. No OTP sent",
+            "message": "Email address already verified.",
         }
 
-    user_service.update_user(user, {"is_email_verified": True}, session)
+    await user_service.update_user(user, {"is_email_verified": True}, session)
 
-    invalidate_previous_otps(user, session)
+    await invalidate_previous_otps(user, session)
 
     send_email(
         background_tasks,

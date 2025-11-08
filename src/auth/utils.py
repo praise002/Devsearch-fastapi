@@ -91,8 +91,8 @@ async def invalidate_previous_otps(user, session):
     statement = select(Otp).where(Otp.user_id == user.id)
     results = await session.exec(statement)
     for otp in results.all():
-        session.delete(otp)
-    session.commit()
+        await session.delete(otp)
+    await session.commit()
 
 
 async def generate_otp(user, session):

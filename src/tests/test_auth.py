@@ -3,7 +3,7 @@ from httpx import AsyncClient
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.auth.service import UserService
-from src.db.models import User
+from src.db.models import Otp, User
 
 
 class TestUserRegistration:
@@ -21,7 +21,6 @@ class TestUserRegistration:
 
         # Act: Make registration request
         response = await async_client.post(self.register_url, json=valid_user_data)
-        print(response.json())
 
         # Assert: Check response
         assert response.status_code == 201
@@ -103,7 +102,7 @@ class TestUserRegistration:
         """
 
         response = await async_client.post(self.register_url, json=invalid_user_data)
-        print(response.json())
+
         assert response.status_code == 422
 
     async def test_register_weak_password(
@@ -116,7 +115,6 @@ class TestUserRegistration:
         """
 
         response = await async_client.post(self.register_url, json=weak_password_data)
-        print(response.json())
 
         assert response.status_code == 422
 
@@ -132,7 +130,6 @@ class TestUserRegistration:
         }
 
         response = await async_client.post(self.register_url, json=incomplete_data)
-        print(response.json())
 
         assert response.status_code == 422
 
@@ -173,7 +170,7 @@ class TestEmailVerification:
         async_client: AsyncClient,
         db_session: AsyncSession,
         registered_user: User,
-        otp_for_user: str,
+        otp_for_user: int,
         mock_email: list,
     ):
 
@@ -188,66 +185,109 @@ class TestEmailVerification:
         # Assert: Check response
         assert response.status_code == 200
         response_data = response.json()
-        print(response_data)
 
         assert response_data["status"] == "success"
         assert "verified" in response_data["message"]
 
         # Assert: Check user is verified in database
-        # user_service = UserService()
-        # updated_user = await user_service.get_user_by_email(
-        #     registered_user.email, db_session
-        # )
+        user_service = UserService()
+        updated_user = await user_service.get_user_by_email(
+            registered_user.email, db_session
+        )
 
-        # # assert updated_user.is_email_verified is True
-        # print(updated_user.is_email_verified)
-        # print(updated_user)
+        assert updated_user.is_email_verified is True
 
-        # # Assert: Check OTP is invalidated
-        # otp_record = await user_service.get_otp_by_user(
-        #     registered_user.id, otp_for_user, db_session
-        # )
-        # assert otp_record is not None
-        # assert otp_record.is_valid is False
+        # Assert: Check OTP is invalidated
+        otp_record = await user_service.get_otp_by_user(
+            registered_user.id, otp_for_user, db_session
+        )
+        assert otp_record is None
 
-        # # Assert: Check welcome email was sent
-        # assert len(mock_email) == 1
-        # email_data = mock_email[0]
-        # assert email_data["email_to"] == registered_user.email
-        # assert email_data["subject"] == "Account Verified"
-        # assert "name" in email_data["template_context"]
-        # assert email_data["template_context"]["name"] == registered_user.first_name
+        # Assert: Check welcome email was sent
+        assert len(mock_email) == 1
 
-    # async def test_verify_email_invalid_otp(
-    #     self,
-    #     async_client: AsyncClient,
-    #     db_session: AsyncSession,
-    #     registered_user: User,
-    # ):
-    #     """
-    #     Test verification fails with invalid OTP.
-    #     """
-    #     # Arrange
-    #     verification_data = {
-    #         "email": registered_user.email,
-    #         "otp": "999999"  # Invalid OTP
-    #     }
+    async def test_verify_email_invalid_otp(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+        registered_user: User,
+    ):
+        """
+        Test verification fails with invalid OTP.
+        """
+        # Arrange
+        verification_data = {
+            "email": registered_user.email,
+            "otp": "999999",
+        }
 
-    #     # Act
-    #     response = await async_client.post(
-    #         "/api/v1/auth/verification/verify",
-    #         json=verification_data
-    #     )
+        # Act
+        response = await async_client.post(
+            self.verify_user_email, json=verification_data
+        )
 
-    #     # Assert
-    #     assert response.status_code == 400  # Bad Request
-    #     response_data = response.json()
-    #     assert response_data["detail"] == "Invalid OTP"
+        # Assert
+        assert response.status_code == 422
+        response_data = response.json()
+        assert response_data["err_code"] == "invalid_otp"
 
-    #     # Assert: User should still be unverified
-    #     user_service = UserService()
-    #     user = await user_service.get_user_by_email(registered_user.email, db_session)
-    #     assert user.is_email_verified is False
+        # Assert: User should still be unverified
+        user_service = UserService()
+        user = await user_service.get_user_by_email(registered_user.email, db_session)
+        assert user.is_email_verified is False
+
+    async def test_verify_email_user_not_found(
+        self,
+        async_client: AsyncClient,
+        otp_for_user: str,
+    ):
+        """
+        Test verification fails for non-existent user.
+        """
+        # Arrange
+        verification_data = {"email": "nonexistent@example.com", "otp": otp_for_user}
+
+        # Act
+        response = await async_client.post(
+            self.verify_user_email, json=verification_data
+        )
+
+        # Assert
+        assert response.status_code == 422
+
+    async def test_verify_email_already_verified(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+        verified_user: User,
+        mock_email: list,
+    ):
+        """
+        Test verification when user is already verified.
+        """
+        # Arrange
+        otp_record = Otp(user_id=verified_user.id, otp=123456, is_valid=True)
+        db_session.add(otp_record)
+        await db_session.commit()
+
+        verification_data = {"email": verified_user.email, "otp": 123456}
+
+        # Act
+        response = await async_client.post(
+            self.verify_user_email, json=verification_data
+        )
+
+        # Assert
+        assert response.status_code == 200
+        response_data = response.json()
+
+        assert response_data["status"] == "success"
+        assert response_data["message"] == "Email address already verified."
+
+        # Assert: No welcome emails should be sent for already verified users
+        assert len(mock_email) == 0
 
 
-# TODO: USE FAKER
+# FastAPI Filters
+# FastAPI-Users
+# FastAPI-Admin
