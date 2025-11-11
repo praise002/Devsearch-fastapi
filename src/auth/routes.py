@@ -47,7 +47,7 @@ from src.auth.utils import (
 )
 from src.config import Config
 from src.db.main import get_session
-from src.db.models import User
+from src.db.models import Profile, ProfileSkill, User
 from src.db.redis import add_jti_to_blocklist
 from src.errors import (
     AccountNotVerified,
@@ -94,7 +94,7 @@ async def create_user_account(
 
     new_user = await user_service.create_user(user_data, session)
 
-    otp = generate_otp(new_user, session)
+    otp = await generate_otp(new_user, session)
     send_email(
         background_tasks,
         "Verify your email",
@@ -151,7 +151,7 @@ async def verify_user_account(
         "Account Verified",
         user.email,
         {"name": user.first_name},
-        "welcome_message",
+        "welcome_message.html",
     )
 
     return {
@@ -183,14 +183,15 @@ async def resend_verification_email(
             "message": "Email address already verified. No OTP sent",
         }
 
-    invalidate_previous_otps(user, session)
+    await invalidate_previous_otps(user, session)
 
+    otp = await generate_otp(user, session)
     send_email(
         background_tasks,
         "Verify your email",
         user.email,
-        {"name": user.first_name},
-        "welcome_message",
+        {"name": user.first_name, "otp": str(otp)},
+        "verify_email_request.html",
     )
 
     return {
@@ -216,13 +217,13 @@ async def login_user(
     if (
         user is None
         or user.hashed_password is None
-        or not verify_password(password, user.password_hash)
+        or not verify_password(password, user.hashed_password)
     ):
         return JSONResponse(
             content={
                 "status": "failure",
                 "message": "No active account found with the given credentials",
-                "error_code": "unauthorized",
+                "err_code": "unauthorized",
             },
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
@@ -233,14 +234,14 @@ async def login_user(
     if not user.is_active:
         raise UserNotActive()
 
-    password_valid = verify_password(password, user.password_hash)
+    password_valid = verify_password(password, user.hashed_password)
     if password_valid:
         user_data = user_data = {
             "email": user.email,
             "user_id": str(user.id),
-            "role": user.role,
+            "role": user.role.value,
         }
-        tokens = user_service.create_token_pair(user_data)
+        tokens = await user_service.create_token_pair(user_data, session)
 
         return {
             "status": "success",
@@ -266,9 +267,7 @@ async def refresh_token(
     expiry_timestamp = token_details["exp"]
 
     if datetime.fromtimestamp(expiry_timestamp) > datetime.now():
-        new_token = user_service.create_token_pair(
-            token_details["user"],
-        )
+        new_token = await user_service.create_token_pair(token_details["user"], session)
 
         return {
             "status": "success",
@@ -288,18 +287,24 @@ async def refresh_token(
 )
 async def get_current_user_endpoint(
     current_user=Depends(get_current_user),
-    _: bool = Depends(role_checker),
+    # _: bool = Depends(role_checker),
     session: AsyncSession = Depends(get_session),
 ):
     statement = (
         select(User)
-        .options(selectinload(User.profile))
+        .options(
+            selectinload(User.profile)
+            .selectinload(Profile.skills)  
+            .selectinload(ProfileSkill.skill) 
+            
+        )
         .where(User.id == current_user.id)
     )
+
     result = await session.exec(statement)
     user = result.first()
     profile = user.profile
-    skill = profile.skill
+    skill = profile.skills
     profile_skill = skill.profile_skill
 
     if not user:
@@ -410,7 +415,7 @@ async def password_reset_verify_otp(
         raise InvalidOtp()
 
     # Clear OTP after verification
-    invalidate_previous_otps(user, session)
+    await invalidate_previous_otps(user, session)
 
     send_email(
         background_tasks,
@@ -445,7 +450,7 @@ async def password_reset_done(
         raise UserNotFound()
 
     passwd_hash = hash_password(new_password)
-    await user_service.update_user(user, {"password_hash": passwd_hash}, session)
+    await user_service.update_user(user, {"hashed_password": passwd_hash}, session)
     send_email(
         background_tasks,
         "Password Reset Successful",
@@ -486,9 +491,9 @@ async def password_change(
     user_data = {
         "email": user.email,
         "user_id": str(user.id),
-        "role": user.role,
+        "role": user.role.value,
     }
-    tokens = user_service.create_token_pair(user_data)
+    tokens = await user_service.create_token_pair(user_data, session)
 
     return {
         "status": "success",

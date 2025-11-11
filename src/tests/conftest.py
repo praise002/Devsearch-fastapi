@@ -11,7 +11,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src import app
 from src.auth.schemas import UserCreate
 from src.db.main import get_session
-from faker import Faker
+
 
 def pytest_configure(config):
     """
@@ -99,45 +99,31 @@ async def test_engine(database_url, event_loop):
         future=True,
     )
 
-    # Create all tables before tests
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
-
     yield engine
-
-    # Drop all tables after all tests
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.drop_all)
 
     # Dispose engine
     await engine.dispose()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
     """
-    Creates a fresh database session for each test.
-
-
-
-    Args:
-        test_engine: The async engine from test_engine fixture
-
-    Yields:
-        AsyncSession: Database session for the test
+    Creates a fresh database with clean tables for each test.
     """
-    # Create session factory
+    # Drop and recreate all tables before each test
+    async with test_engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.drop_all)
+        await conn.run_sync(SQLModel.metadata.create_all)
+
+    # Create session
     async_session_maker = async_sessionmaker(
-        test_engine,
+        bind=test_engine,
         class_=AsyncSession,
         expire_on_commit=False,
     )
 
-    # Create session
     async with async_session_maker() as session:
         yield session
-        # Rollback happens automatically when exiting this block
-        await session.rollback()
 
 
 @pytest.fixture
@@ -171,13 +157,10 @@ async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, 
     app.dependency_overrides.clear()
 
 
-# TODO: NOT CERTAIN OF MONKEYPATCH YET
 @pytest.fixture
 def mock_email(monkeypatch):
     """
     Mocks the send_email function to prevent real emails during tests.
-
-
 
     Returns:
         list: List of "sent" emails that can be verified in tests
@@ -205,17 +188,15 @@ def mock_email(monkeypatch):
     from src.auth import routes
 
     monkeypatch.setattr(routes, "send_email", fake_send_email)
+    # TODO: FIX, ACTUAL EMAIL BEING SENT
 
     return sent_emails
 
 
-# TODO: NOT CERTAIN OF MONKEYPATCH YET
 @pytest.fixture
 def mock_otp(monkeypatch):
     """
     Mocks OTP generation to return predictable test value.
-
-
 
     Returns:
         int: The predictable OTP that will be "generated"
@@ -266,22 +247,23 @@ def another_user_data():
 
 
 @pytest.fixture
-def user2_data(faker: Faker):
+def user2_data():
     return {
-        "email": faker.email(),
-        "username": faker.user_name(),
-        "first_name": faker.first_name(),
-        "last_name": faker.last_name(),
+        "email": "user2@example.com",
+        "username": "user2",
+        "first_name": "Test",
+        "last_name": "User2",
         "password": "SecurePass123!",
     }
-    
+
+
 @pytest.fixture
-def user3_data(faker: Faker):
+def user3_data():
     return {
-        "email": faker.email(),
-        "username": faker.user_name(),
-        "first_name": faker.first_name(),
-        "last_name": faker.last_name(),
+        "email": "user3@example.com",
+        "username": "user3",
+        "first_name": "Test",
+        "last_name": "User3",
         "password": "SecurePass123!",
     }
 
@@ -345,6 +327,23 @@ async def verified_user(
 
 
 @pytest.fixture
+async def inactive_user(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    another_user_data: dict,
+):
+
+    from src.auth.service import UserService
+
+    user_service = UserService()
+    user_create = UserCreate(**another_user_data)
+    user = await user_service.create_user(user_create, db_session)
+
+    await user_service.update_user(user, {"is_email_verified": True, "is_active": False}, db_session)
+    return user
+
+
+@pytest.fixture
 async def otp_for_user(
     db_session: AsyncSession,
     registered_user,
@@ -362,6 +361,3 @@ async def otp_for_user(
     await db_session.commit()
 
     return mock_otp
-
-
-# TODO: SWITCH TO KAY APPROACH LATER

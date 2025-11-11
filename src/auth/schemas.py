@@ -2,7 +2,14 @@ import re
 from typing import Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 
 class UserBase(BaseModel):
@@ -10,6 +17,11 @@ class UserBase(BaseModel):
     last_name: str = Field(max_length=50)
     username: str  # NOTE: SHOULD NEVER CHANGE and be unique
     email: EmailStr
+
+    @field_validator("email", mode="after")
+    @classmethod
+    def lowercase_email(cls, value: str) -> str:
+        return value.lower()
 
     @model_validator(mode="after")
     def validate(self) -> Self:
@@ -24,7 +36,7 @@ class UserInDB(UserBase):
 
 
 class UserCreate(UserBase):
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=8, max_length=20)
 
     @field_validator("password", mode="after")
     @classmethod
@@ -53,6 +65,11 @@ class OtpVerify(BaseModel):
     email: EmailStr
     otp: int = Field(examples=[123456])
 
+    @field_validator("email", mode="after")
+    @classmethod
+    def lowercase_email(cls, value: str) -> str:
+        return value.lower()
+
     @field_validator("otp", mode="after")
     @classmethod
     def check_otp_digits(cls, value: int) -> str:
@@ -63,6 +80,11 @@ class OtpVerify(BaseModel):
 
 class SendOtp(BaseModel):
     email: EmailStr
+
+    @field_validator("email", mode="after")
+    @classmethod
+    def lowercase_email(cls, value: str) -> str:
+        return value.lower()
 
 
 class UserUpdate(BaseModel):
@@ -75,7 +97,6 @@ class SkillResponse(BaseModel):
     name: str
     description: str | None = None
 
-    
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -100,7 +121,6 @@ class UserResponse(BaseModel):
 
     skills: list[SkillResponse] = []
 
-    
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -113,6 +133,11 @@ class UserRegistrationResponse(BaseModel):
 class UserLoginModel(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
+
+    @field_validator("email", mode="after")
+    @classmethod
+    def lowercase_email(cls, value: str) -> str:
+        return value.lower()
 
 
 class TokenResponse(BaseModel):
@@ -127,6 +152,11 @@ class TokenData(BaseModel):
 class PasswordResetModel(BaseModel):
     email: EmailStr
 
+    @field_validator("email", mode="after")
+    @classmethod
+    def lowercase_email(cls, value: str) -> str:
+        return value.lower()
+
 
 class PasswordResetVerifyOtpModel(BaseModel):
     email: EmailStr
@@ -137,6 +167,11 @@ class PasswordResetConfirmModel(BaseModel):
     email: EmailStr
     new_password: str
     confirm_new_password: str
+
+    @field_validator("email", mode="after")
+    @classmethod
+    def lowercase_email(cls, value: str) -> str:
+        return value.lower()
 
     @field_validator("new_password", mode="after")
     @classmethod
@@ -181,6 +216,12 @@ class PasswordChangeModel(BaseModel):
             raise ValueError("Password is too common. Choose a stronger password")
 
         return value
+
+    @model_validator(mode="after")
+    def check_passwords_match(self) -> Self:
+        if self.new_password != self.confirm_new_password:
+            raise ValueError("Password does not match")
+        return self
 
     @model_validator(mode="after")
     def check_passwords_match(self) -> Self:

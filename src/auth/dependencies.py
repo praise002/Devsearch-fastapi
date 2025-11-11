@@ -17,10 +17,11 @@ from src.errors import (
 user_service = UserService()
 
 # NOTE:
-# - auto_error=False: so that we can use our custom 401 error 
+# - auto_error=False: so that we can use our custom 401 error
 # instead of default 403
 # It returns None if no auth header so we need the check below
 # if creds is None:
+
 
 class TokenBearer(HTTPBearer):
     def __init__(self, auto_error=False):
@@ -53,13 +54,13 @@ class TokenBearer(HTTPBearer):
 
 class AccessTokenBearer(TokenBearer):
     def verify_token_data(self, token_data: dict) -> None:
-        if token_data and token_data["refresh"]:
+        if token_data and token_data.get("token_type") != "access":
             raise AccessTokenRequired()
 
 
 class RefreshTokenBearer(TokenBearer):
     def verify_token_data(self, token_data: dict) -> None:
-        if token_data and not token_data["refresh"]:
+        if token_data and token_data.get("token_type") != "refresh":
             raise RefreshTokenRequired()
 
 
@@ -71,6 +72,7 @@ async def get_current_user(
 ):
 
     user_email = token_details["user"]["email"]
+
     user = await user_service.get_user_by_email(user_email, session)
     return user
 

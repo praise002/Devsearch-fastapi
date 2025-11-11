@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import List
 
 from decouple import config
 from fastapi.responses import RedirectResponse
@@ -35,6 +36,11 @@ class UserService:
         result = await session.exec(statement)
         otp_record = result.first()
         return otp_record
+    
+    async def get_user_otps(self, user_id: str, session: AsyncSession) -> List[Otp]:
+        statement = select(Otp).where(Otp.user_id == user_id)
+        result = await session.exec(statement)
+        return result.all()
 
     async def user_exists(self, email: str, session: AsyncSession):
         user = await self.get_user_by_email(email, session)
