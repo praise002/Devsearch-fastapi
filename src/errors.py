@@ -7,6 +7,18 @@ from fastapi.responses import JSONResponse
 
 def register_all_errors(app: FastAPI):
     app.add_exception_handler(
+        NotAuthenticated,
+        create_exception_handler(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            initial_detail={
+                "status": "failure",
+                "message": "Not Authenticated",
+                "err_code": "unauthorized",
+            },
+        ),
+    )
+    
+    app.add_exception_handler(
         UserAlreadyExists,
         create_exception_handler(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -212,6 +224,10 @@ class BaseException(Exception):
 
     pass
 
+class NotAuthenticated(BaseException):
+    """User is not authenticated"""
+
+    pass
 
 class InvalidOtp(BaseException):
     """User has provided an invalid or expired otp"""

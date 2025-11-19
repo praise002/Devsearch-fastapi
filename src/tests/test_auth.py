@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from unittest import mock
 from unittest.mock import patch
 
 import pytest
@@ -18,10 +19,9 @@ class TestUserRegistration:
         self,
         async_client: AsyncClient,
         db_session: AsyncSession,
-        mock_email: list,
         valid_user_data: dict,
+        mock_email: list,
     ):
-
         # Act: Make registration request
         response = await async_client.post(self.register_url, json=valid_user_data)
 
@@ -73,6 +73,7 @@ class TestUserRegistration:
         async_client: AsyncClient,
         db_session: AsyncSession,
         valid_user_data: dict,
+        mock_email: list,
     ):
         # Arrange
         await async_client.post(self.register_url, json=valid_user_data)
@@ -93,6 +94,7 @@ class TestUserRegistration:
         async_client: AsyncClient,
         db_session: AsyncSession,
         valid_user_data: dict,
+        mock_email: list,
     ):
         """
         Test registration fails when username already exists.
@@ -660,7 +662,7 @@ class TestGetCurrentUserProfile:
         profile.tw = "https://twitter.com/testuser"
         profile.ln = "https://linkedin.com/in/testuser"
         profile.website = "https://testuser.com"
-        
+
         skill = Skill(
             name="Python",
         )
@@ -680,7 +682,7 @@ class TestGetCurrentUserProfile:
         }
 
         login_response = await async_client.post(self.login_url, json=login_data)
-        
+
         response_json = login_response.json()
         print(response_json)
         access = response_json["access"]
@@ -688,38 +690,30 @@ class TestGetCurrentUserProfile:
         response = await async_client.get(
             self.url, headers={"Authorization": f"Bearer {access}"}
         )
-        
+
         assert response.status_code == 200
         response_data = response.json()
         print(response_data)
-        
-        # # User fields
-        # assert response_data["id"] == str(verified_user.id)
-        # assert response_data["email"] == verified_user.email
-        # assert response_data["first_name"] == verified_user.first_name
-        # assert response_data["last_name"] == verified_user.last_name
-        # assert response_data["username"] == verified_user.username
-        
-        # # Profile fields
-        # assert response_data["short_intro"] == profile.short_intro
-        # assert response_data["bio"] == profile.bio
-        # assert response_data["location"] == profile.location
-        # assert response_data["github"] == profile.github
-        # assert response_data["stack_overflow"] == profile.stack_overflow
-        # assert response_data["tw"] == profile.tw
-        # assert response_data["ln"] == profile.ln
-        # assert response_data["website"] == profile.website
-        
-        # # Skills data
-        # assert "skills" in response_data
-        # assert response_data["skills"]["id"] == skill.id
-        # assert response_data["skills"]["name"] == skill.name
-        # assert response_data["skills"]["description"] == profile_skill.description
+
+        assert response_data["id"] == str(verified_user.id)
+
+    async def test_get_user_profile_unauthenticated(
+        self,
+        async_client: AsyncClient,
+    ):
+        # Act: Try to access without authentication
+        response = await async_client.get(self.url)
+
+        # Assert
+        assert response.status_code == 401
+        response_data = response.json()
+        print(response_data)
+        assert response_data["err_code"] == "unauthorized"
 
 
 # FastAPI Filters
 # FastAPI-Users
 # FastAPI-Admin
-# pytest src/tests/test_auth.py::TestResendVerificationEmail::test_resend_otp_success -v -s
+# pytest src/tests/test_auth.py::TestGetCurrentUserProfile -v -s
 # pytest src/tests/test_auth.py::TestResendVerificationEmail::test_resend_otp_success -v -s
 # TODO: FIX EMAIL SENDING

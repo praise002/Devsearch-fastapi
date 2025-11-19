@@ -11,6 +11,7 @@ from src.errors import (
     AccountNotVerified,
     InsufficientPermission,
     InvalidToken,
+    NotAuthenticated,
     RefreshTokenRequired,
 )
 
@@ -30,9 +31,7 @@ class TokenBearer(HTTPBearer):
     async def __call__(self, request: Request) -> HTTPAuthorizationCredentials | None:
         creds = await super().__call__(request)
         if creds is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Not Authenticated"
-            )
+            raise NotAuthenticated()
         token = creds.credentials
         token_data = decode_token(token)
 

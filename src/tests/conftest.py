@@ -160,35 +160,42 @@ async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, 
 @pytest.fixture
 def mock_email(monkeypatch):
     """
-    Mocks the send_email function to prevent real emails during tests.
+    Mocks the send_email_by_type function to prevent real emails during tests.
 
     Returns:
         list: List of "sent" emails that can be verified in tests
     """
     sent_emails = []
 
-    def fake_send_email(
+    def fake_send_email_by_type(
         background_tasks,
-        subject: str,
+        email_type: str,
         email_to: str,
-        template_context: dict,
-        template_name: str,
+        name: str,
+        otp: str = None,
     ):
-        """Fake send_email that stores email details."""
+        """Fake send_email_by_type that stores email details."""
+
+        from src.mail import get_email_template_data
+
+        email_data = get_email_template_data(email_type)
+
+        template_context = {"name": name}
+        if otp:
+            template_context["otp"] = str(otp)
+
         sent_emails.append(
             {
-                "subject": subject,
+                "subject": email_data["subject"],
                 "email_to": email_to,
                 "template_context": template_context,
-                "template_name": template_name,
+                "template_name": email_data["template_name"],
             }
         )
 
-    # Mock send_email where it's USED (in routes), not where it's defined
     from src.auth import routes
 
-    monkeypatch.setattr(routes, "send_email", fake_send_email)
-    # TODO: FIX, ACTUAL EMAIL BEING SENT
+    monkeypatch.setattr(routes, "send_email_by_type", fake_send_email_by_type)
 
     return sent_emails
 
@@ -339,7 +346,9 @@ async def inactive_user(
     user_create = UserCreate(**another_user_data)
     user = await user_service.create_user(user_create, db_session)
 
-    await user_service.update_user(user, {"is_email_verified": True, "is_active": False}, db_session)
+    await user_service.update_user(
+        user, {"is_email_verified": True, "is_active": False}, db_session
+    )
     return user
 
 

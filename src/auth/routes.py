@@ -61,7 +61,7 @@ from src.errors import (
     UserNotActive,
     UserNotFound,
 )
-from src.mail import send_email
+from src.mail import send_email, send_email_by_type
 
 router = APIRouter()
 
@@ -95,13 +95,20 @@ async def create_user_account(
     new_user = await user_service.create_user(user_data, session)
 
     otp = await generate_otp(new_user, session)
-    send_email(
+    send_email_by_type(
         background_tasks,
-        "Verify your email",
+        "activate",
         new_user.email,
-        {"name": new_user.first_name, "otp": str(otp)},
-        "verify_email_request.html",
+        new_user.first_name,
+        otp=otp,
     )
+    # send_email(
+    #     background_tasks,
+    #     "Verify your email",
+    #     new_user.email,
+    #     {"name": new_user.first_name, "otp": str(otp)},
+    #     "verify_email_request.html",
+    # )
 
     return {
         "status": "success",
@@ -146,12 +153,11 @@ async def verify_user_account(
 
     await invalidate_previous_otps(user, session)
 
-    send_email(
+    send_email_by_type(
         background_tasks,
-        "Account Verified",
+        "welcome",
         user.email,
-        {"name": user.first_name},
-        "welcome_message.html",
+        user.first_name,
     )
 
     return {
@@ -186,12 +192,12 @@ async def resend_verification_email(
     await invalidate_previous_otps(user, session)
 
     otp = await generate_otp(user, session)
-    send_email(
+    send_email_by_type(
         background_tasks,
-        "Verify your email",
+        "activate",
         user.email,
-        {"name": user.first_name, "otp": str(otp)},
-        "verify_email_request.html",
+        user.first_name,
+        otp=otp,
     )
 
     return {
@@ -294,23 +300,34 @@ async def get_current_user_endpoint(
         select(User)
         .options(
             selectinload(User.profile)
-            .selectinload(Profile.skills)  
-            .selectinload(ProfileSkill.skill) 
-            
+            .selectinload(Profile.skills)
+            .selectinload(ProfileSkill.skill)
         )
         .where(User.id == current_user.id)
     )
 
     result = await session.exec(statement)
     user = result.first()
-    profile = user.profile
-    skill = profile.skills
-    profile_skill = skill.profile_skill
 
     if not user:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="User not found"
         )
+
+    profile = user.profile
+
+    skills_response = []
+
+    if profile.skills:
+        for profile_skill in profile.skills:
+            if profile_skill.skill:
+                skills_response.append(
+                    SkillResponse(
+                        id=profile_skill.skill.id,
+                        name=profile_skill.skill.name,
+                        description=profile_skill.description,
+                    )
+                )
 
     return UserResponse(
         # User fields
@@ -328,11 +345,7 @@ async def get_current_user_endpoint(
         tw=profile.tw,
         ln=profile.ln,
         website=profile.website,
-        skills=SkillResponse(
-            id=skill.id,
-            name=skill.name,
-            description=profile_skill.description,
-        ),
+        skills=skills_response,
     )
 
 
@@ -375,12 +388,12 @@ async def password_reset_request(
         )
 
     otp = generate_otp(user, session)
-    send_email(
+    send_email_by_type(
         background_tasks,
-        "Reset Your Password",
+        "reset",
         user.email,
-        {"name": user.first_name, "otp": str(otp)},
-        "password_reset_email.html",
+        user.first_name,
+        otp=otp,
     )
 
     # ALWAYS return the same message
@@ -417,14 +430,6 @@ async def password_reset_verify_otp(
     # Clear OTP after verification
     await invalidate_previous_otps(user, session)
 
-    send_email(
-        background_tasks,
-        "Verify your email",
-        user.email,
-        {"name": user.first_name},
-        "welcome_message",
-    )
-
     return {
         "status": "success",
         "message": "OTP verified, proceed to set a new password",
@@ -451,12 +456,11 @@ async def password_reset_done(
 
     passwd_hash = hash_password(new_password)
     await user_service.update_user(user, {"hashed_password": passwd_hash}, session)
-    send_email(
+    send_email_by_type(
         background_tasks,
-        "Password Reset Successful",
+        "reset-success",
         user.email,
-        {"name": user.first_name},
-        "password_reset_success.html",
+        user.first_name,
     )
 
     return {
@@ -590,12 +594,11 @@ async def google_auth_callback(
                 user_create_obj, session
             )
 
-            send_email(
+            send_email_by_type(
                 background_tasks,
-                "Welcome",
+                "welcome",
                 new_user.email,
-                {"name": new_user.first_name},
-                "welcome_message",
+                new_user.first_name,
             )
 
             return response
