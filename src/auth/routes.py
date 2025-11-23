@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from decouple import config
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
@@ -364,6 +364,19 @@ async def revoke_token(
 
 
 @router.post(
+    "/logout/all",
+    status_code=status.HTTP_200_OK,
+    responses=LOGOUT_ALL_RESPONSES,
+)
+async def revoke_all(
+    user=Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    await user_service.blacklist_all_user_tokens(user.id, session)
+    return {"status": "success", "message": "Logged out of all devices successfully"}
+
+
+@router.post(
     "/passwords/reset",
     status_code=status.HTTP_200_OK,
     responses=PASSWORD_RESET_REQUEST_RESPONSES,
@@ -371,23 +384,30 @@ async def revoke_token(
 async def password_reset_request(
     email_data: PasswordResetModel,
     background_tasks: BackgroundTasks,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ):
     email = email_data.email
-    user = await UserService.get_user_by_email(email, session)
-    if not user:
+    user = await user_service.get_user_by_email(email, session)
+    if not user or not user.is_active:
         # silently pass due to security reasons
         logging.warning(
-            f"Password reset attempted on non-existent account",
+            "Password reset attempt on invalid/inactive account",
             extra={
                 "event_type": "password_reset_invalid_email",
                 "email": email,
-                "client_ip": "",
-                "user_agent": "",
+                # TODO: test it
+                # "client_ip": request.client.host,
+                # "user_agent": request.headers.get("user-agent"),
+                "timestamp": datetime.now(timezone.utc),
             },
         )
+        return {
+            "status": "success",
+            "message": "If that email address is in our database, we will send you an email to reset your password",
+        }
 
-    otp = generate_otp(user, session)
+    otp = await generate_otp(user, session)
     send_email_by_type(
         background_tasks,
         "reset",
@@ -504,19 +524,6 @@ async def password_change(
         "message": "Password changed successfully",
         **tokens,
     }  # TODO: USE HTTP-COOKIE LATER
-
-
-@router.post(
-    "/logout/all",
-    status_code=status.HTTP_200_OK,
-    responses=LOGOUT_ALL_RESPONSES,
-)
-async def revoke_all(
-    user=Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    await user_service.blacklist_all_user_tokens(user.id, session)
-    return {"status": "success", "message": "Logged out of all devices successfully"}
 
 
 @router.get(

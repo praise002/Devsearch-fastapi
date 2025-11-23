@@ -1,8 +1,11 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator
 
+import jwt
 import pytest
 from httpx import ASGITransport, AsyncClient
+from pytest_asyncio import is_async_test
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 from sqlmodel import SQLModel
@@ -10,14 +13,16 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src import app
 from src.auth.schemas import UserCreate
+from src.config import Config
 from src.db.main import get_session
 
 
-def pytest_configure(config):
-    """
-    Configure pytest markers and settings.
-    """
-    config.addinivalue_line("markers", "asyncio: mark test as an asyncio test")
+# def pytest_collection_modifyitems(items):
+#     """Apply session scope to all async tests"""
+#     pytest_asyncio_tests = (item for item in items if is_async_test(item))
+#     session_scope_marker = pytest.mark.asyncio(loop_scope="session")
+#     for async_test in pytest_asyncio_tests:
+#         async_test.add_marker(session_scope_marker, append=False)
 
 
 @pytest.fixture(scope="session")
@@ -80,13 +85,12 @@ async def database_url(postgresql_proc):
 
 
 @pytest.fixture(scope="session")
-async def test_engine(database_url, event_loop):
+async def test_engine(database_url):
     """
     Creates async SQLAlchemy engine connected to temporary database.
 
     Args:
         database_url: URL from database_url fixture
-        event_loop: Event loop for async operations
 
     Returns:
         AsyncEngine: SQLAlchemy async engine
@@ -123,7 +127,10 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
     )
 
     async with async_session_maker() as session:
-        yield session
+        try:
+            yield session
+        finally:
+            await session.close()
 
 
 @pytest.fixture
@@ -209,7 +216,7 @@ def mock_otp(monkeypatch):
         int: The predictable OTP that will be "generated"
     """
 
-    def fake_generate_otp(user, session):
+    async def fake_generate_otp(user, session):
         return 123456
 
     from src.auth import routes
@@ -370,3 +377,54 @@ async def otp_for_user(
     await db_session.commit()
 
     return mock_otp
+
+
+@pytest.fixture
+def expired_refresh_token():
+    """Generate an expired refresh token for testing"""
+    now = datetime.now(timezone.utc)
+    user_data = {
+        "user": {
+            "email": "test@example.com",
+            "user_id": "test-user-id",
+            "role": "user",
+        },
+        "iat": now,
+        "exp": now - timedelta(hours=1),  # Expired 1 hour ago
+        "jti": "expired-token-jti",
+        "token_type": "refresh",
+    }
+
+    expired_token = jwt.encode(
+        user_data,
+        Config.JWT_SECRET,
+        algorithm=Config.JWT_ALGORITHM,
+    )
+
+    return expired_token
+
+
+@pytest.fixture
+def expired_access_token():
+    """Generate an expired access token for testing"""
+    now = datetime.now(timezone.utc)
+    user_data = {
+        "user": {
+            "email": "test@example.com",
+            "user_id": "test-user-id",
+            "role": "user",
+        },
+        "iat": now,
+        "exp": datetime.now(timezone.utc)
+        - timedelta(minutes=30),  # Expired 30 mins ago
+        "jti": "expired-access-token-jti",
+        "token_type": "access",
+    }
+
+    expired_token = jwt.encode(
+        user_data,
+        Config.JWT_SECRET,
+        algorithm=Config.JWT_ALGORITHM,
+    )
+
+    return expired_token

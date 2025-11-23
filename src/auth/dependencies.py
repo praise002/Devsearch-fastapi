@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -28,7 +28,9 @@ class TokenBearer(HTTPBearer):
     def __init__(self, auto_error=False):
         super().__init__(auto_error=auto_error)
 
-    async def __call__(self, request: Request) -> HTTPAuthorizationCredentials | None:
+    async def __call__(
+        self, request: Request, session: AsyncSession = Depends(get_session)
+    ) -> HTTPAuthorizationCredentials | None:
         creds = await super().__call__(request)
         if creds is None:
             raise NotAuthenticated()
@@ -36,6 +38,11 @@ class TokenBearer(HTTPBearer):
         token_data = decode_token(token)
 
         if not self.token_valid(token):
+            raise InvalidToken()
+
+        # Check if token is blacklisted
+        jti = token_data.get("jti")
+        if jti and await user_service.is_token_blacklisted(jti, session):
             raise InvalidToken()
 
         self.verify_token_data(token_data)

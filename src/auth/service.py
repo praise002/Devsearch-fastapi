@@ -202,7 +202,8 @@ class UserService:
 
     async def is_token_blacklisted(self, jti: str, session: AsyncSession) -> bool:
         """Check if a token JTI is blacklisted"""
-        if await token_in_blacklist(jti):
+        is_blacklisted = await token_in_blacklist(jti)
+        if is_blacklisted:
             return True
 
         # fallback

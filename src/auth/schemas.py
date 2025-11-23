@@ -222,9 +222,3 @@ class PasswordChangeModel(BaseModel):
         if self.new_password != self.confirm_new_password:
             raise ValueError("Password does not match")
         return self
-
-    @model_validator(mode="after")
-    def check_passwords_match(self) -> Self:
-        if self.new_password != self.confirm_new_password:
-            raise ValueError("Password does not match")
-        return self

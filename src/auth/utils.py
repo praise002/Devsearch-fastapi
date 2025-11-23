@@ -64,10 +64,10 @@ def create_refresh_token(user_data: dict, expiry: timedelta = None):
     payload = {
         "token_type": "refresh",
         "exp": now + expiry,
-        "iat": now,
+        "iat": now,  # issued at in unix timestamp
         "jti": jti,
         "user": user_data,
-    }
+    }  # user_id, full_name
 
     token = jwt.encode(
         payload=payload, key=Config.JWT_SECRET, algorithm=Config.JWT_ALGORITHM
