@@ -423,7 +423,7 @@ async def password_reset_request(
     }
 
 
-@router.get(
+@router.post(
     "/passwords/reset/verify",
     status_code=status.HTTP_200_OK,
     responses=PASSWORD_RESET_VERIFY_RESPONSES,
@@ -440,9 +440,13 @@ async def password_reset_verify_otp(
 
     if not user:
         raise UserNotFound()
+    
+    if not user.is_active:
+        raise UserNotActive()
 
-    otp_record = await user_service.get_otp_by_user(user_id, otp, session)
     user_id = user.id
+    otp_record = await user_service.get_otp_by_user(user_id, otp, session)
+    
 
     if not otp_record or not otp_record.is_valid:
         raise InvalidOtp()

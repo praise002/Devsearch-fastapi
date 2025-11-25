@@ -1253,7 +1253,6 @@ class TestPasswordResetRequest:
     async def test_password_reset_request_case_insensitive_email(
         self,
         async_client: AsyncClient,
-        db_session: AsyncSession,
         verified_user: User,
         mock_email: list,
     ):
@@ -1268,8 +1267,87 @@ class TestPasswordResetRequest:
         assert mock_email[0]["email_to"] == verified_user.email.lower()
 
 
+class TestPasswordResetVerifyOtp:
+    """Test suite for password reset OTP verification endpoint"""
+
+    verify_otp_url = "/api/v1/auth/passwords/reset/verify"
+    reset_request_url = "/api/v1/auth/passwords/reset"
+
+    async def test_verify_otp_success(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+        registered_user: User,
+    ):
+
+        # Create a valid OTP for the user
+        otp = 123456
+        otp_record = Otp(user_id=registered_user.id, otp=otp, is_valid=True)
+        db_session.add(otp_record)
+        await db_session.commit()
+
+        # Verify the OTP
+        response = await async_client.post(
+            self.verify_otp_url,
+            json={
+                "email": registered_user.email,
+                "otp": otp,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        print(data)
+        assert data["status"] == "success"
+        assert "proceed to set a new password" in data["message"].lower()
+        
+    async def test_verify_otp_inactive_user(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+        inactive_user: User,
+    ):
+
+        # Create a valid OTP for the user
+        otp = 123456
+        otp_record = Otp(user_id=inactive_user.id, otp=otp, is_valid=True)
+        db_session.add(otp_record)
+        await db_session.commit()
+
+        # Verify the OTP
+        response = await async_client.post(
+            self.verify_otp_url,
+            json={
+                "email": inactive_user.email,
+                "otp": otp,
+            },
+        )
+
+        # assert response.status_code == 200
+        data = response.json()
+        print(data)
+        assert data["status"] == "failure"
+        assert "disabled" in data["message"].lower()
+
+
+    async def test_verify_otp_user_not_found(
+        self,
+        async_client: AsyncClient,
+    ):
+        response = await async_client.post(
+            self.verify_otp_url,
+            json={
+                "email": "nonexistent@example.com",
+                "otp": 123456,
+            },
+        )
+
+        assert response.status_code == 422
+        data = response.json()
+        print(data)
+        assert data["err_code"] == "user_not_found"
 # FastAPI Filters
 # FastAPI-Users
 # FastAPI-Admin
-# pytest src/tests/test_auth.py::TestGetCurrentUserProfile -v -s
+# pytest src/tests/test_auth.py::TestPasswordResetVerifyOtp -v -s
 # pytest src/tests/test_auth.py::TestResendVerificationEmail::test_resend_otp_success -v -s
