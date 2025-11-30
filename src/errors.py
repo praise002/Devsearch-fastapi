@@ -17,7 +17,7 @@ def register_all_errors(app: FastAPI):
             },
         ),
     )
-    
+
     app.add_exception_handler(
         UserAlreadyExists,
         create_exception_handler(
@@ -29,7 +29,7 @@ def register_all_errors(app: FastAPI):
             },
         ),
     )
-    
+
     app.add_exception_handler(
         UsernameAlreadyExists,
         create_exception_handler(
@@ -207,6 +207,30 @@ def register_all_errors(app: FastAPI):
         ),
     )
 
+    app.add_exception_handler(
+        PasswordSameAsOld,
+        create_exception_handler(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            initial_detail={
+                "status": "failure",
+                "message": "New password cannot be the same as your current password",
+                "err_code": "password_same_as_old",
+            },
+        ),
+    )
+    
+    app.add_exception_handler(
+        NoFilenameProvided,
+        create_exception_handler(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            initial_detail={
+                "status": "failure",
+                "message": "No filename provided",
+                "err_code": "no_filename_provided",
+            },
+        ),
+    )
+
     @app.exception_handler(500)
     async def internal_server_error(request, exc):
         return JSONResponse(
@@ -224,10 +248,12 @@ class BaseException(Exception):
 
     pass
 
+
 class NotAuthenticated(BaseException):
     """User is not authenticated"""
 
     pass
+
 
 class InvalidOtp(BaseException):
     """User has provided an invalid or expired otp"""
@@ -263,6 +289,7 @@ class UserAlreadyExists(BaseException):
     """User has provided an email for a user who exists during sign up"""
 
     pass
+
 
 class UsernameAlreadyExists(BaseException):
     """Username exists"""
@@ -312,8 +339,19 @@ class InvalidOldPassword(BaseException):
     pass
 
 
+class PasswordSameAsOld(BaseException):
+    """New password is the same as the old password"""
+
+    pass
+
+
 class GoogleAuthenticationFailed(BaseException):
     """Google authentication failed"""
+
+    pass
+
+class NoFilenameProvided(BaseException):
+    """No filename provided"""
 
     pass
 
@@ -323,5 +361,5 @@ def create_exception_handler(
 ) -> Callable[[Request, Exception], JSONResponse]:
     async def exception_handler(request: Request, exc: BaseException):
         return JSONResponse(content=initial_detail, status_code=status_code)
-    
+
     return exception_handler

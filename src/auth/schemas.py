@@ -161,6 +161,11 @@ class PasswordResetModel(BaseModel):
 class PasswordResetVerifyOtpModel(BaseModel):
     email: EmailStr
     otp: int
+    
+    @field_validator("email", mode="after")
+    @classmethod
+    def lowercase_email(cls, value: str) -> str:
+        return value.lower()
 
 
 class PasswordResetConfirmModel(BaseModel):

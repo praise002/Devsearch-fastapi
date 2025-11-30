@@ -1,12 +1,14 @@
 from typing import ClassVar
 
+import cloudinary
+from decouple import config
 from fastapi_mail import ConnectionConfig
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    ACCESS_TOKEN_EXPIRY: int = 60 # 60 minutes
-    REFRESH_TOKEN_EXPIRY: int = 7 # 7 days
+    ACCESS_TOKEN_EXPIRY: int = 60  # 60 minutes
+    REFRESH_TOKEN_EXPIRY: int = 7  # 7 days
     DATABASE_URL: str
     REDIS_URL: ClassVar[str] = "redis://localhost:6379/0"
     JWT_SECRET: str
@@ -46,3 +48,12 @@ conf = ConnectionConfig(
     VALIDATE_CERTS=Config.VALIDATE_CERTS,
     TEMPLATE_FOLDER="templates",
 )
+
+
+cloudinary.config(
+    cloud_name=config("CLOUDINARY_CLOUD_NAME"),
+    api_key=config("CLOUDINARY_API_KEY"),
+    api_secret=config("CLOUDINARY_API_SECRET"),
+    secure=True,
+)
+# TODO: How do i add this here MEDIA_TAG": "devsearch/media",

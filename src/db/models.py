@@ -23,7 +23,6 @@ class User(SQLModel, table=True):
     email: EmailStr = Field(sa_column=Column(String(50), nullable=False, unique=True), min_length=1)
     google_id: str | None = Field(sa_column=Column(String(50), unique=True), default=None)
     auth_provider: str | None = Field(max_length=50, default=None, nullable=True)
-    # hashed_password: str = Field(exclude=True)
     hashed_password: str | None = Field(default=None, exclude=True, nullable=True)
     is_active: bool = True
     is_email_verified: bool = False

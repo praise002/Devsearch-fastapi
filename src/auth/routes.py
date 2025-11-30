@@ -56,6 +56,7 @@ from src.errors import (
     InvalidOtp,
     InvalidToken,
     PasswordMismatch,
+    PasswordSameAsOld,
     UserAlreadyExists,
     UsernameAlreadyExists,
     UserNotActive,
@@ -243,7 +244,7 @@ async def login_user(
     password_valid = verify_password(password, user.hashed_password)
     if password_valid:
         user_data = user_data = {
-            "email": user.email,
+            "username": user.username,
             "user_id": str(user.id),
             "role": user.role.value,
         }
@@ -440,13 +441,12 @@ async def password_reset_verify_otp(
 
     if not user:
         raise UserNotFound()
-    
+
     if not user.is_active:
         raise UserNotActive()
 
     user_id = user.id
     otp_record = await user_service.get_otp_by_user(user_id, otp, session)
-    
 
     if not otp_record or not otp_record.is_valid:
         raise InvalidOtp()
@@ -460,7 +460,7 @@ async def password_reset_verify_otp(
     }
 
 
-@router.get(
+@router.post(
     "/passwords/reset/complete",
     status_code=status.HTTP_200_OK,
     responses=PASSWORD_RESET_COMPLETE_RESPONSES,
@@ -477,6 +477,9 @@ async def password_reset_done(
 
     if not user:
         raise UserNotFound()
+
+    if not user.is_active:
+        raise UserNotActive()
 
     passwd_hash = hash_password(new_password)
     await user_service.update_user(user, {"hashed_password": passwd_hash}, session)
@@ -503,7 +506,7 @@ async def password_change(
     current_user=Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    if data.new_password != data.confirm_password:
+    if data.new_password != data.confirm_new_password:
         raise PasswordMismatch()
 
     user = await user_service.get_user_by_email(current_user.email, session)
@@ -511,10 +514,13 @@ async def password_change(
     if not verify_password(data.old_password, user.hashed_password):
         raise InvalidOldPassword()
 
-    hashed_password = hash_password(data.new_password)
-    await user_service.update_user(user, {"hashed_password": hashed_password})
+    if verify_password(data.new_password, user.hashed_password):
+        raise PasswordSameAsOld()
 
-    await user_service.blacklist_all_user_tokens(user.id)  # or str(user.id)
+    hashed_password = hash_password(data.new_password)
+    await user_service.update_user(user, {"hashed_password": hashed_password}, session)
+
+    await user_service.blacklist_all_user_tokens(user.id, session)  # or str(user.id)
 
     user_data = {
         "email": user.email,
@@ -542,7 +548,7 @@ async def password_change(
     - This endpoint performs a redirect to Google's authentication page
     - Redirects do not work properly in Swagger UI/API documentation
     - To test this endpoint:
-      1. Copy the full URL: `http://127.0.0.1:7000/api/v1/auth/google`
+      1. Copy the full URL: `http://127.0.0.1:8000/api/v1/auth/google`
       2. Paste it directly into your browser address bar
       3. You will be redirected to Google for authentication
       4. After authentication, you'll be redirected back to the callback URL

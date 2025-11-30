@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 from httpx import AsyncClient
+from pydantic import Json
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.auth.service import UserService
@@ -1285,6 +1286,7 @@ class TestPasswordResetVerifyOtp:
         otp_record = Otp(user_id=registered_user.id, otp=otp, is_valid=True)
         db_session.add(otp_record)
         await db_session.commit()
+        print(otp_record)
 
         # Verify the OTP
         response = await async_client.post(
@@ -1300,7 +1302,7 @@ class TestPasswordResetVerifyOtp:
         print(data)
         assert data["status"] == "success"
         assert "proceed to set a new password" in data["message"].lower()
-        
+
     async def test_verify_otp_inactive_user(
         self,
         async_client: AsyncClient,
@@ -1329,7 +1331,6 @@ class TestPasswordResetVerifyOtp:
         assert data["status"] == "failure"
         assert "disabled" in data["message"].lower()
 
-
     async def test_verify_otp_user_not_found(
         self,
         async_client: AsyncClient,
@@ -1346,8 +1347,611 @@ class TestPasswordResetVerifyOtp:
         data = response.json()
         print(data)
         assert data["err_code"] == "user_not_found"
+
+    async def test_verify_otp_no_reset_requested(
+        self,
+        async_client: AsyncClient,
+        verified_user: User,
+    ):
+
+        # Act: Try to verify OTP without requesting reset first
+        verify_data = {"email": verified_user.email, "otp": 123456}
+        response = await async_client.post(self.verify_otp_url, json=verify_data)
+
+        # Assert
+        assert response.status_code == 422
+        response_data = response.json()
+        print(response_data)
+        assert response_data["err_code"] == "invalid_otp"
+
+    async def test_verify_otp_expired(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+        verified_user: User,
+    ):
+
+        # Arrange: Create an expired OTP (created 15+ minutes ago)
+        from datetime import datetime, timedelta, timezone
+
+        expired_otp = Otp(
+            user_id=verified_user.id,
+            otp=123456,
+            created_at=datetime.now(timezone.utc) - timedelta(minutes=20),
+        )
+        db_session.add(expired_otp)
+        await db_session.commit()
+        print(expired_otp)
+
+        # Act: Try to verify expired OTP
+        verify_data = {"email": verified_user.email, "otp": 123456}
+        response = await async_client.post(self.verify_otp_url, json=verify_data)
+
+        # Assert
+        assert response.status_code == 422
+        response_data = response.json()
+        print(response_data)
+        assert response_data["err_code"] == "invalid_otp"
+
+    async def test_verify_otp_missing_email(
+        self,
+        async_client: AsyncClient,
+    ):
+
+        # Act: Missing email parameter
+        verify_data = {"otp": 123456}
+        response = await async_client.post(self.verify_otp_url, json=verify_data)
+
+        # Assert
+        assert response.status_code == 422
+        response_data = response.json()
+        print(response_data)
+
+    async def test_verify_otp_missing_otp(
+        self,
+        async_client: AsyncClient,
+        verified_user: User,
+    ):
+
+        # Act: Missing OTP parameter
+        verify_data = {"email": verified_user.email}
+        response = await async_client.post(self.verify_otp_url, json=verify_data)
+
+        # Assert
+        assert response.status_code == 422
+        response_data = response.json()
+        print(response_data)
+
+    async def test_verify_otp_case_insensitive_email(
+        self,
+        async_client: AsyncClient,
+        verified_user: User,
+        db_session: AsyncSession,
+    ):
+        from datetime import datetime, timedelta, timezone
+
+        otp = Otp(
+            user_id=verified_user.id,
+            otp=123456,
+            created_at=datetime.now(timezone.utc),
+        )
+        db_session.add(otp)
+        await db_session.commit()
+        print(otp)
+
+        # Act: Verify with uppercase email
+        verify_data = {"email": verified_user.email.upper(), "otp": 123456}
+        response = await async_client.post(self.verify_otp_url, json=verify_data)
+
+        # Assert: Should succeed
+        assert response.status_code == 200
+        response_data = response.json()
+        print(response_data)
+        assert response_data["status"] == "success"
+
+
+class TestPasswordResetComplete:
+    """Test suite for password reset completion endpoint"""
+
+    complete_url = "/api/v1/auth/passwords/reset/complete"
+
+    async def test_password_reset_complete_success(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+        verified_user: User,
+        mock_email: list,
+    ):
+
+        # Arrange: New password data
+        new_password_data = {
+            "email": verified_user.email,
+            "new_password": "NewSecurePass123!",
+            "confirm_new_password": "NewSecurePass123!",
+        }
+
+        # Act: Complete password reset
+        response = await async_client.post(self.complete_url, json=new_password_data)
+
+        # Assert: Check response
+        assert response.status_code == 200
+        response_data = response.json()
+        print(response_data)
+
+        assert response_data["status"] == "success"
+        assert "password has been reset" in response_data["message"].lower()
+        assert "proceed to login" in response_data["message"].lower()
+
+        user_service = UserService()
+        updated_user = await user_service.get_user_by_email(
+            verified_user.email, db_session
+        )
+
+        # Verify new password works
+        from src.auth.utils import verify_password
+
+        assert verify_password("NewSecurePass123!", updated_user.hashed_password)
+
+        # Assert: Success email was sent
+        assert len(mock_email) == 1
+        email_data = mock_email[0]
+        assert email_data["email_to"] == verified_user.email
+        assert email_data["template_name"] == "password_reset_success.html"
+
+    async def test_password_reset_complete_user_not_found(
+        self,
+        async_client: AsyncClient,
+    ):
+
+        # Arrange: Non-existent user data
+        reset_data = {
+            "email": "nonexistent@example.com",
+            "new_password": "NewSecurePass123!",
+            "confirm_new_password": "NewSecurePass123!",
+        }
+
+        # Act: Try to complete reset
+        response = await async_client.post(self.complete_url, json=reset_data)
+
+        # Assert
+        assert response.status_code == 422
+        response_data = response.json()
+        print(response_data)
+        assert response_data["err_code"] == "user_not_found"
+
+    async def test_password_reset_complete_password_mismatch(
+        self,
+        async_client: AsyncClient,
+        verified_user: User,
+    ):
+        # Arrange: Mismatched passwords
+        reset_data = {
+            "email": verified_user.email,
+            "new_password": "NewSecurePass123!",
+            "confirm_new_password": "DifferentPass123!",
+        }
+
+        # Act: Try to complete reset
+        response = await async_client.post(self.complete_url, json=reset_data)
+
+        # Assert: Should fail validation
+        assert response.status_code == 422
+        response_data = response.json()
+        print(response_data)
+        # Pydantic validation error for password mismatch
+
+    async def test_password_reset_complete_weak_password(
+        self,
+        async_client: AsyncClient,
+        verified_user: User,
+    ):
+
+        # Arrange: Weak password
+        reset_data = {
+            "email": verified_user.email,
+            "new_password": "123",
+            "confirm_new_password": "123",
+        }
+
+        # Act: Try to complete reset
+        response = await async_client.post(self.complete_url, json=reset_data)
+
+        # Assert: Should fail validation
+        assert response.status_code == 422
+        response_data = response.json()
+        print(response_data)
+        # Pydantic validation error for weak password
+
+    async def test_password_reset_complete_missing_fields(
+        self,
+        async_client: AsyncClient,
+        verified_user: User,
+    ):
+
+        # Test missing email
+        reset_data = {
+            "new_password": "NewSecurePass123!",
+            "confirm_new_password": "NewSecurePass123!",
+        }
+        response = await async_client.post(self.complete_url, json=reset_data)
+        print(response.json())
+        assert response.status_code == 422
+
+        # Test missing new_password
+        reset_data = {
+            "email": verified_user.email,
+            "confirm_new_password": "NewSecurePass123!",
+        }
+        response = await async_client.post(self.complete_url, json=reset_data)
+        print(response.json())
+        assert response.status_code == 422
+
+        # Test missing confirm_new_password
+        reset_data = {
+            "email": verified_user.email,
+            "new_password": "NewSecurePass123!",
+        }
+        response = await async_client.post(self.complete_url, json=reset_data)
+        print(response.json())
+        assert response.status_code == 422
+
+    async def test_password_reset_complete_case_insensitive_email(
+        self,
+        async_client: AsyncClient,
+        verified_user: User,
+        mock_email: list,
+    ):
+
+        # Arrange: New password data with uppercase email
+        reset_data = {
+            "email": verified_user.email.upper(),
+            "new_password": "NewSecurePass123!",
+            "confirm_new_password": "NewSecurePass123!",
+        }
+
+        # Act: Complete reset
+        response = await async_client.post(self.complete_url, json=reset_data)
+
+        # Assert: Should succeed
+        assert response.status_code == 200
+        response_data = response.json()
+        print(response_data)
+        assert response_data["status"] == "success"
+
+        # Assert: Email was sent to lowercase email
+        assert len(mock_email) == 1
+        assert mock_email[0]["email_to"] == verified_user.email.lower()
+
+    async def test_password_reset_complete_inactive_user(
+        self,
+        async_client: AsyncClient,
+        inactive_user: User,
+    ):
+
+        # Arrange: Reset data for inactive user
+        reset_data = {
+            "email": inactive_user.email,
+            "new_password": "NewSecurePass123!",
+            "confirm_new_password": "NewSecurePass123!",
+        }
+
+        # Act: Complete reset
+        response = await async_client.post(self.complete_url, json=reset_data)
+
+        # Assert: Should succeed (inactive users can reset password)
+        assert response.status_code == 403
+        response_data = response.json()
+        print(response_data)
+        assert response_data["err_code"] == "forbidden"
+
+    async def test_password_reset_complete_unverified_user(
+        self,
+        async_client: AsyncClient,
+        registered_user: User,
+        mock_email: list,
+    ):
+
+        # Arrange: Reset data for unverified user
+        reset_data = {
+            "email": registered_user.email,
+            "new_password": "NewSecurePass123!",
+            "confirm_new_password": "NewSecurePass123!",
+        }
+
+        # Act: Complete reset
+        response = await async_client.post(self.complete_url, json=reset_data)
+
+        # Assert: Should succeed (unverified users can reset password)
+        assert response.status_code == 200
+        response_data = response.json()
+        print(response_data)
+        assert response_data["status"] == "success"
+
+        # Assert: Success email was sent
+        assert len(mock_email) == 1
+
+
+class TestPasswordChange:
+    """Test suite for password change endpoint"""
+
+    change_url = "/api/v1/auth/passwords/change"
+    login_url = "/api/v1/auth/token"
+
+    async def test_password_change_success(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+        verified_user: User,
+        user3_data: dict,
+    ):
+
+        # Arrange: Login to get access token
+        login_data = {
+            "email": verified_user.email,
+            "password": user3_data["password"],
+        }
+        login_response = await async_client.post(self.login_url, json=login_data)
+        assert login_response.status_code == 200
+        tokens = login_response.json()
+        access_token = tokens["access"]
+
+        # Act: Change password
+        change_data = {
+            "old_password": user3_data["password"],
+            "new_password": "NewSecurePass123!",
+            "confirm_new_password": "NewSecurePass123!",
+        }
+        response = await async_client.post(
+            self.change_url,
+            json=change_data,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        # Assert: Check response
+        assert response.status_code == 200
+        response_data = response.json()
+        print(response_data)
+
+        assert response_data["status"] == "success"
+        assert "Password changed successfully" in response_data["message"]
+        assert "access" in response_data
+        assert "refresh" in response_data
+
+        user_service = UserService()
+        updated_user = await user_service.get_user_by_email(
+            verified_user.email, db_session
+        )
+
+        # Verify new password works
+        from src.auth.utils import verify_password
+
+        assert verify_password("NewSecurePass123!", updated_user.hashed_password)
+
+        # Assert: Old password no longer works
+        assert not verify_password(user3_data["password"], updated_user.hashed_password)
+
+    async def test_password_change_wrong_old_password(
+        self,
+        async_client: AsyncClient,
+        verified_user: User,
+        user3_data: dict,
+    ):
+
+        # Arrange: Login to get access token
+        login_data = {
+            "email": verified_user.email,
+            "password": user3_data["password"],
+        }
+        login_response = await async_client.post(self.login_url, json=login_data)
+        tokens = login_response.json()
+        access_token = tokens["access"]
+
+        # Act: Try to change password with wrong old password
+        change_data = {
+            "old_password": "WrongOldPassword123!",
+            "new_password": "NewSecurePass123!",
+            "confirm_new_password": "NewSecurePass123!",
+        }
+        response = await async_client.post(
+            self.change_url,
+            json=change_data,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        # Assert
+        assert response.status_code == 401
+        response_data = response.json()
+        print(response_data)
+        assert response_data["err_code"] == "invalid_old_password"
+
+    async def test_password_change_weak_new_password(
+        self,
+        async_client: AsyncClient,
+        verified_user: User,
+        user3_data: dict,
+    ):
+
+        # Arrange: Login to get access token
+        login_data = {
+            "email": verified_user.email,
+            "password": user3_data["password"],
+        }
+        login_response = await async_client.post(self.login_url, json=login_data)
+        tokens = login_response.json()
+        access_token = tokens["access"]
+
+        # Act: Try to change password with weak new password
+        change_data = {
+            "old_password": user3_data["password"],
+            "new_password": "123",
+            "confirm_new_password": "123",
+        }
+        response = await async_client.post(
+            self.change_url,
+            json=change_data,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        # Assert: Should fail validation
+        assert response.status_code == 422
+        response_data = response.json()
+        print(response_data)
+        # Pydantic validation error for weak password
+
+    async def test_password_change_unauthenticated(
+        self,
+        async_client: AsyncClient,
+    ):
+        # Act: Try to change password without token
+        change_data = {
+            "old_password": "SomePassword123!",
+            "new_password": "NewSecurePass123!",
+            "confirm_new_password": "NewSecurePass123!",
+        }
+        response = await async_client.post(self.change_url, json=change_data)
+
+        # Assert
+        assert response.status_code == 401
+        response_data = response.json()
+        print(response_data)
+        assert response_data["err_code"] == "unauthorized"
+
+    async def test_password_change_old_tokens_blacklisted(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+        verified_user: User,
+        user3_data: dict,
+    ):
+
+        # Arrange: Login to get initial tokens
+        login_data = {
+            "email": verified_user.email,
+            "password": user3_data["password"],
+        }
+        login_response = await async_client.post(self.login_url, json=login_data)
+        old_tokens = login_response.json()
+        old_access = old_tokens["access"]
+        old_refresh = old_tokens["refresh"]
+
+        # Act: Change password
+        change_data = {
+            "old_password": user3_data["password"],
+            "new_password": "NewSecurePass123!",
+            "confirm_new_password": "NewSecurePass123!",
+        }
+        response = await async_client.post(
+            self.change_url,
+            json=change_data,
+            headers={"Authorization": f"Bearer {old_access}"},
+        )
+        assert response.status_code == 200
+
+        # Old refresh token should also be blacklisted
+        refresh_response = await async_client.post(
+            "/api/v1/auth/token/refresh",
+            headers={"Authorization": f"Bearer {old_refresh}"},
+        )
+        print(refresh_response.json())
+        assert refresh_response.status_code == 401
+
+    async def test_password_change_same_as_old_password(
+        self,
+        async_client: AsyncClient,
+        verified_user: User,
+        user3_data: dict,
+    ):
+
+        # Arrange: Login to get access token
+        login_data = {
+            "email": verified_user.email,
+            "password": user3_data["password"],
+        }
+        login_response = await async_client.post(self.login_url, json=login_data)
+        tokens = login_response.json()
+        access_token = tokens["access"]
+
+        # Act: Try to change password to the same value
+        change_data = {
+            "old_password": user3_data["password"],
+            "new_password": user3_data["password"],
+            "confirm_new_password": user3_data["password"],
+        }
+        response = await async_client.post(
+            self.change_url,
+            json=change_data,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        # Assert: Should not succeed
+        assert response.status_code == 422
+        response_data = response.json()
+        print(response_data)
+        assert response_data["err_code"] == "password_same_as_old"
+
+    async def test_password_change_missing_fields(
+        self,
+        async_client: AsyncClient,
+        verified_user: User,
+        user3_data: dict,
+    ):
+
+        # Arrange: Login to get access token
+        login_data = {
+            "email": verified_user.email,
+            "password": user3_data["password"],
+        }
+        login_response = await async_client.post(self.login_url, json=login_data)
+        tokens = login_response.json()
+        access_token = tokens["access"]
+
+        # Test missing old_password
+        change_data = {
+            "new_password": "NewSecurePass123!",
+            "confirm_new_password": "NewSecurePass123!",
+        }
+        response = await async_client.post(
+            self.change_url,
+            json=change_data,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        print(response.json())
+        assert response.status_code == 422
+
+        # Test missing new_password
+        change_data = {
+            "old_password": user3_data["password"],
+            "confirm_new_password": "NewSecurePass123!",
+        }
+        response = await async_client.post(
+            self.change_url,
+            json=change_data,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        print(response.json())
+        assert response.status_code == 422
+
+        # Test missing confirm_new_password
+        change_data = {
+            "old_password": user3_data["password"],
+            "new_password": "NewSecurePass123!",
+        }
+        response = await async_client.post(
+            self.change_url,
+            json=change_data,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert response.status_code == 422
+
+
+class TestGoogleOAuth:
+    """Test suite for Google OAuth endpoints"""
+
+    google_auth_url = "/api/v1/auth/google"
+    google_callback_url = "/api/v1/auth/google/callback"
+
+
 # FastAPI Filters
 # FastAPI-Users
 # FastAPI-Admin
-# pytest src/tests/test_auth.py::TestPasswordResetVerifyOtp -v -s
-# pytest src/tests/test_auth.py::TestResendVerificationEmail::test_resend_otp_success -v -s
+# pytest src/tests/test_auth.py::TestPasswordResetVerifyOtp::test_verify_otp_inactive_user -v -s
+# pytest src/tests/test_auth.py::TestPasswordResetComplete -v -s

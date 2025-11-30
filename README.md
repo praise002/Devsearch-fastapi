@@ -7,23 +7,23 @@ A powerful FastAPI-based platform designed to connect developers worldwide, enab
 ## 📋 PROJECT ROADMAP
 
 ### ✅ Phase 1: Foundation & Setup (COMPLETED)
-- [x] Project structure setup
-- [x] FastAPI application initialization
-- [x] Database models design (User, Profile, Project, Skill, Review, Message, Tag, OTP)
-- [x] SQLModel + SQLAlchemy configuration
-- [x] Alembic migrations setup
-- [x] PostgreSQL database connection
+- ✅ Project structure setup
+- ✅ FastAPI application initialization
+- ✅ Database models design (User, Profile, Project, Skill, Review, Message, Tag, OTP)
+- ✅ SQLModel + SQLAlchemy configuration
+- ✅ Alembic migrations setup
+- ✅ PostgreSQL database connection
 - [x] Basic admin interface with Starlette Admin
-- [x] Static files and templates configuration
+- ✅ Static files and templates configuration
 
 ### 🔄 Phase 2: Authentication & User Management (IN PROGRESS)
-- [x] User registration endpoint
-- [x] Password hashing utilities
-- [x] User profile auto-creation
-- [x] Email verification system
-- [x] JWT authentication implementation
-- [x] Login/logout endpoints
-- [x] Password reset functionality
+- ✅ User registration endpoint
+- ✅ Password hashing utilities
+- ✅ User profile auto-creation
+- ✅ Email verification system
+- ✅ JWT authentication implementation
+- ✅ Login/logout endpoints
+- ✅ Password reset functionality
 - [ ] User profile CRUD operations
 - [ ] User role management
 
@@ -169,19 +169,32 @@ src/
 ### Authentication (Implemented)
 - `POST /api/v1/auth/register` - User registration
 
-### Authentication (Planned)
-- `POST /api/v1/auth/login` - User login
-- `POST /api/v1/auth/logout` - User logout
-- `POST /api/v1/auth/verify-email` - Email verification
-- `POST /api/v1/auth/forgot-password` - Password reset request
-- `POST /api/v1/auth/reset-password` - Password reset
+### Authentication (Implemented)
+- `POST /api/v1/auth/register` - User registration
+- `POST /api/v1/auth/verification/verify` - Email verification
+- `POST /api/v1/auth/verification` - Resend verification email
+- `POST /api/v1/auth/token` - User login
+- `POST /api/v1/auth/token/refresh` - Refresh access token
+- `GET /api/v1/auth/me` - Get current authenticated user profile
+- `POST /api/v1/auth/logout` - User logout (single device)
+- `POST /api/v1/auth/logout/all` - User logout (all devices)
+- `POST /api/v1/auth/passwords/reset` - Password reset request
+- `POST /api/v1/auth/passwords/reset/verify` - Verify OTP for password reset
+- `POST /api/v1/auth/passwords/reset/complete` - Complete password reset
+- `POST /api/v1/auth/passwords/change` - Change password (authenticated users)
+- `GET /api/v1/auth/google` - Initiate Google OAuth login
+- `GET /api/v1/auth/google/callback` - Handle Google OAuth callback
 
 ### Profiles (Planned)
 - `GET /api/v1/profiles/` - List profiles
-- `GET /api/v1/profiles/{id}` - Get profile
-- `PUT /api/v1/profiles/{id}` - Update profile
-- `POST /api/v1/profiles/{id}/skills` - Add skill
-- `DELETE /api/v1/profiles/{id}/skills/{skill_id}` - Remove skill
+- `PATCH /api/v1/profiles/image/` - Update user image
+- `DELETE /api/v1/profiles/image/` - Delete user image
+- `GET /api/v1/profiles/{username}` - Get user profile
+- `PATCH /api/v1/profiles/{username}` - Update user profile
+- `POST /api/v1/profiles/{username}/skills` - Add skill
+- `PATCH /api/v1/profiles/{username}/skills` - Update a specific skill e.g adding description
+- `GET /api/v1/profiles/skills` - Retrieve a list of skills
+- `DELETE /api/v1/profiles/{username}/skills/{skill_id}` - Remove skill
 
 ### Projects (Planned)
 - `GET /api/v1/projects/` - List projects
