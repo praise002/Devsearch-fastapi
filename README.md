@@ -48,11 +48,8 @@ A powerful FastAPI-based platform designed to connect developers worldwide, enab
 - [ ] Vote ratio calculations
 
 ### 📅 Phase 4: Communication Features (PLANNED)
-- [ ] Messaging system between users
-- [ ] Message read/unread status
-- [ ] Message threading
-- [ ] Notification system
-- [ ] Email notifications
+- [ ] Inbox system between users
+- [ ] Inbox read/unread status
 
 ### 📅 Phase 5: Advanced Features (PLANNED)
 #### Search & Discovery

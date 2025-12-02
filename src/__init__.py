@@ -6,6 +6,7 @@ from starlette.templating import Jinja2Templates
 from starlette_admin.contrib.sqla import Admin, ModelView
 
 from src.auth.routes import router as auth_router
+from src.profiles.routes import router as profile_router
 from src.db.main import async_engine
 from src.db.models import User
 from src.errors import register_all_errors
@@ -65,7 +66,7 @@ admin = Admin(async_engine, title="Devsearch")
 # admin.mount_to(app)
 
 app.include_router(auth_router, prefix=f"/api/{version}/auth", tags=["Auth"])
-
+app.include_router(profile_router, prefix=f"/api/{version}/profiles", tags=["Profiles"])
 
 # @app.get("/")
 # async def root():

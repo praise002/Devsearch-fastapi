@@ -58,7 +58,7 @@ tests:
 	pytest --disable-warnings -vv -x -s
 
 random_s:
-	python -c "import secrets; print(secrets.token_urlsafe(32))"
+	python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 
 # Run all auth tests
 # pytest tests/test_auth/ -v

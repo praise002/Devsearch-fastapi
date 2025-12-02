@@ -1,6 +1,5 @@
 from typing import Optional
 
-import cloudinary.api
 import cloudinary.uploader
 from fastapi import HTTPException, UploadFile, status
 
@@ -131,10 +130,12 @@ class CloudinaryService:
             # We want: avatars/user123
             parts = url.split("/upload/")
             if len(parts) > 1:
-                path_parts = parts[1].split("/")[1:]  #
+                path_parts = parts[1].split("/")[1:]
                 public_id_with_ext = "/".join(path_parts)
                 public_id = public_id_with_ext.rsplit(".", 1)[0]
                 return public_id
         except Exception:
             pass
         return None
+
+# TODO: FIX HE HTTP EXCEPTIONS

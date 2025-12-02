@@ -2,14 +2,7 @@ import re
 from typing import Self
 from uuid import UUID
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    EmailStr,
-    Field,
-    field_validator,
-    model_validator,
-)
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 class UserBase(BaseModel):
@@ -87,43 +80,6 @@ class SendOtp(BaseModel):
         return value.lower()
 
 
-class UserUpdate(BaseModel):
-    first_name: str | None = Field(default=None, max_length=50)
-    last_name: str | None = Field(default=None, max_length=50)
-
-
-class SkillResponse(BaseModel):
-    id: UUID
-    name: str
-    description: str | None = None
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class UserResponse(BaseModel):
-    # User fields
-    id: UUID
-    first_name: str
-    last_name: str
-    username: str
-    email: EmailStr
-
-    # Profile fields
-    short_intro: str | None = None
-    bio: str | None = None
-    location: str | None = None
-    avatar_url: str | None = None
-    github: str | None = None
-    stack_overflow: str | None = None
-    tw: str | None = None
-    ln: str | None = None
-    website: str | None = None
-
-    skills: list[SkillResponse] = []
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 class UserRegistrationResponse(BaseModel):
     status: str = "success"
     email: EmailStr
@@ -161,7 +117,7 @@ class PasswordResetModel(BaseModel):
 class PasswordResetVerifyOtpModel(BaseModel):
     email: EmailStr
     otp: int
-    
+
     @field_validator("email", mode="after")
     @classmethod
     def lowercase_email(cls, value: str) -> str:

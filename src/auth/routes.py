@@ -3,16 +3,12 @@ from datetime import datetime, timezone
 
 from decouple import config
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
-from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse, RedirectResponse
-from sqlalchemy.orm import selectinload
-from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.auth.dependencies import RefreshTokenBearer, RoleChecker, get_current_user
 from src.auth.oauth_config import oauth
 from src.auth.schema_examples import (
-    GET_USER_PROFILE_RESPONSES,
     LOGIN_RESPONSES,
     LOGOUT_ALL_RESPONSES,
     LOGOUT_RESPONSES,
@@ -32,11 +28,9 @@ from src.auth.schemas import (
     PasswordResetModel,
     PasswordResetVerifyOtpModel,
     SendOtp,
-    SkillResponse,
     UserCreate,
     UserLoginModel,
     UserRegistrationResponse,
-    UserResponse,
 )
 from src.auth.service import UserService
 from src.auth.utils import (
@@ -47,7 +41,6 @@ from src.auth.utils import (
 )
 from src.config import Config
 from src.db.main import get_session
-from src.db.models import Profile, ProfileSkill, User
 from src.db.redis import add_jti_to_blocklist
 from src.errors import (
     AccountNotVerified,
@@ -55,14 +48,14 @@ from src.errors import (
     InvalidOldPassword,
     InvalidOtp,
     InvalidToken,
+    NotFound,
     PasswordMismatch,
     PasswordSameAsOld,
     UserAlreadyExists,
     UsernameAlreadyExists,
     UserNotActive,
-    UserNotFound,
 )
-from src.mail import send_email, send_email_by_type
+from src.mail import send_email_by_type
 
 router = APIRouter()
 
@@ -136,7 +129,7 @@ async def verify_user_account(
     user = await user_service.get_user_by_email(email, session)
 
     if not user:
-        raise UserNotFound()
+        raise NotFound("User not found")
 
     user_id = user.id
     otp_record = await user_service.get_otp_by_user(user_id, otp, session)
@@ -182,7 +175,7 @@ async def resend_verification_email(
     user = await user_service.get_user_by_email(email, session)
 
     if not user:
-        raise UserNotFound()
+        raise NotFound("User not found")
 
     if user.is_email_verified:
         return {
@@ -285,71 +278,6 @@ async def refresh_token(
     raise InvalidToken()
 
 
-@router.get(
-    "/me",
-    status_code=status.HTTP_200_OK,
-    response_model=UserResponse,
-    description="This endpoint returns the authenticated user's profile information.",
-    responses=GET_USER_PROFILE_RESPONSES,
-)
-async def get_current_user_endpoint(
-    current_user=Depends(get_current_user),
-    # _: bool = Depends(role_checker),
-    session: AsyncSession = Depends(get_session),
-):
-    statement = (
-        select(User)
-        .options(
-            selectinload(User.profile)
-            .selectinload(Profile.skills)
-            .selectinload(ProfileSkill.skill)
-        )
-        .where(User.id == current_user.id)
-    )
-
-    result = await session.exec(statement)
-    user = result.first()
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="User not found"
-        )
-
-    profile = user.profile
-
-    skills_response = []
-
-    if profile.skills:
-        for profile_skill in profile.skills:
-            if profile_skill.skill:
-                skills_response.append(
-                    SkillResponse(
-                        id=profile_skill.skill.id,
-                        name=profile_skill.skill.name,
-                        description=profile_skill.description,
-                    )
-                )
-
-    return UserResponse(
-        # User fields
-        id=user.id,
-        email=user.email,
-        first_name=user.first_name,
-        last_name=user.last_name,
-        username=user.username,
-        # Profile fields
-        short_intro=profile.short_intro,
-        bio=profile.bio,
-        location=profile.location,
-        github=profile.github,
-        stack_overflow=profile.stack_overflow,
-        tw=profile.tw,
-        ln=profile.ln,
-        website=profile.website,
-        skills=skills_response,
-    )
-
-
 @router.post(
     "/logout",
     status_code=status.HTTP_200_OK,
@@ -440,7 +368,7 @@ async def password_reset_verify_otp(
     user = await user_service.get_user_by_email(email, session)
 
     if not user:
-        raise UserNotFound()
+        raise NotFound("User not found")
 
     if not user.is_active:
         raise UserNotActive()
@@ -476,7 +404,7 @@ async def password_reset_done(
     user = await user_service.get_user_by_email(email, session)
 
     if not user:
-        raise UserNotFound()
+        raise NotFound("User not found")
 
     if not user.is_active:
         raise UserNotActive()
@@ -623,3 +551,6 @@ async def google_auth_callback(
     except Exception as e:
         logging.exception(f"Google authentication failed: {str(e)}")
         raise GoogleAuthenticationFailed()
+
+
+# TODO: MIGHT NEED TO REMOVE 200 OK

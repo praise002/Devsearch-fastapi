@@ -43,13 +43,13 @@ def register_all_errors(app: FastAPI):
     )
 
     app.add_exception_handler(
-        UserNotFound,
+        NotFound,
         create_exception_handler(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_404_NOT_FOUND,
             initial_detail={
                 "status": "failure",
-                "message": "User not found",
-                "err_code": "user_not_found",
+                "message": "Not found",
+                "err_code": "not_found",
             },
         ),
     )
@@ -74,7 +74,6 @@ def register_all_errors(app: FastAPI):
                 "status": "failure",
                 # "message": "Invalid otp or otp expired",
                 "message": "Invalid OTP",
-                "resolution": "Please get a new otp",
                 "err_code": "invalid_otp",
             },
         ),
@@ -87,7 +86,6 @@ def register_all_errors(app: FastAPI):
             initial_detail={
                 "status": "failure",
                 "message": "Invalid token or token expired",
-                "resolution": "Please get a new token",
                 "err_code": "invalid_token",
             },
         ),
@@ -100,7 +98,6 @@ def register_all_errors(app: FastAPI):
             initial_detail={
                 "status": "failure",
                 "message": "Google authentication failed",
-                "resolution": "Please get a new token",
                 "err_code": "google_auth_failed",
             },
         ),
@@ -113,7 +110,6 @@ def register_all_errors(app: FastAPI):
             initial_detail={
                 "status": "failure",
                 "message": "Token is invalid or has been revoked",
-                "resolution": "Please get a new token",
                 "err_code": "token_revoked",
             },
         ),
@@ -126,7 +122,6 @@ def register_all_errors(app: FastAPI):
             initial_detail={
                 "status": "failure",
                 "message": "Please provide a valid access token",
-                "resolution": "Please get an access token",
                 "err_code": "access_token_required",
             },
         ),
@@ -139,7 +134,6 @@ def register_all_errors(app: FastAPI):
             initial_detail={
                 "status": "failure",
                 "message": "Please provide a valid refresh token",
-                "resolution": "Please get a refresh token",
                 "err_code": "refresh_token_required",
             },
         ),
@@ -152,7 +146,6 @@ def register_all_errors(app: FastAPI):
             initial_detail={
                 "status": "failure",
                 "message": "You do not have sufficient permissions to perform this action",
-                "resolution": "Please check your permissions or contact an administrator",
                 "err_code": "insufficient_permission",
             },
         ),
@@ -165,7 +158,6 @@ def register_all_errors(app: FastAPI):
             initial_detail={
                 "status": "failure",
                 "message": "Account not verified.",
-                "resolution": "Please check your email for verification details",
                 "err_code": "account_not_verified",
             },
         ),
@@ -218,7 +210,7 @@ def register_all_errors(app: FastAPI):
             },
         ),
     )
-    
+
     app.add_exception_handler(
         NoFilenameProvided,
         create_exception_handler(
@@ -309,10 +301,12 @@ class InsufficientPermission(BaseException):
     pass
 
 
-class UserNotFound(BaseException):
-    """User not found"""
+class NotFound(BaseException):
+    """Resource not found"""
 
-    pass
+    def __init__(self, message: str = "Resource not found"):
+        self.message = message
+        super().__init__(self.message)
 
 
 class AccountNotVerified(BaseException):
@@ -350,6 +344,7 @@ class GoogleAuthenticationFailed(BaseException):
 
     pass
 
+
 class NoFilenameProvided(BaseException):
     """No filename provided"""
 
@@ -360,6 +355,12 @@ def create_exception_handler(
     status_code: int, initial_detail: Any
 ) -> Callable[[Request, Exception], JSONResponse]:
     async def exception_handler(request: Request, exc: BaseException):
+        # If the exception has a custom message, use it
+        if hasattr(exc, "message") and exc.message:
+            detail = initial_detail.copy()
+            detail["message"] = exc.message
+            return JSONResponse(content=detail, status_code=status_code)
+
         return JSONResponse(content=initial_detail, status_code=status_code)
 
     return exception_handler
