@@ -9,18 +9,28 @@
 # - `DELETE /api/v1/profiles/{username}/skills/{skill_id}` - Remove skill
 import logging
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, UploadFile, status
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.auth.dependencies import get_current_user
-from src.auth.schema_examples import GET_USER_PROFILE_RESPONSES
+from src.auth.utils import SUCCESS_EXAMPLE
 from src.cloudinary_service import CloudinaryService
 from src.db.main import get_session
 from src.db.models import Profile, ProfileSkill, User
 from src.errors import NotFound
-from src.profiles.schemas import AvatarUploadResponse, ProfileResponse, ProfileUpdate, SkillResponse
+from src.profiles.schema_examples import (
+    GET_USER_PROFILE_RESPONSES,
+    UPDATE_PROFILE_RESPONSES,
+)
+from src.profiles.schemas import (
+    AvatarUploadResponse,
+    ProfileData,
+    ProfileResponse,
+    ProfileUpdate,
+    SkillResponse,
+)
 from src.profiles.service import ProfileService
 
 router = APIRouter()
@@ -54,7 +64,9 @@ async def get_my_profile(
     user = result.first()
 
     if not user:
-        raise NotFound("Profile not found")
+        raise NotFound(
+            "Profile not found",
+        )
 
     profile = user.profile
 
@@ -74,29 +86,30 @@ async def get_my_profile(
     return ProfileResponse(
         status="success",
         message="Profile retrieved successfully",
-        # User fields
-        id=user.id,
-        email=user.email,
-        first_name=user.first_name,
-        last_name=user.last_name,
-        username=user.username,
-        # Profile fields
-        short_intro=profile.short_intro,
-        bio=profile.bio,
-        location=profile.location,
-        github=profile.github,
-        stack_overflow=profile.stack_overflow,
-        tw=profile.tw,
-        ln=profile.ln,
-        website=profile.website,
-        skills=skills_response,
+        data=ProfileData(
+            # User fields
+            id=user.id,
+            email=user.email,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            username=user.username,
+            # Profile fields
+            short_intro=profile.short_intro,
+            bio=profile.bio,
+            location=profile.location,
+            github=profile.github,
+            stack_overflow=profile.stack_overflow,
+            tw=profile.tw,
+            ln=profile.ln,
+            website=profile.website,
+            skills=skills_response,
+        ),
     )
 
 
 @router.patch(
     "/me",
-    #   description="",
-    # responses=UPDATE_PROFILE_RESPONSES,
+    responses=UPDATE_PROFILE_RESPONSES,
     response_model=ProfileResponse,
 )
 async def update_my_profile(
@@ -117,13 +130,15 @@ async def update_my_profile(
         profile, update_data, session
     )
 
-    return updated_profile
+    return {
+        "status": SUCCESS_EXAMPLE,
+        "message": "Profile updated successfully",
+        "data": updated_profile,
+    }
 
 
 @router.post(
     "/avatar",
-    #   description="",
-    # responses=AVATAR_RESPONSES,
     response_model=AvatarUploadResponse,
 )
 async def upload_avatar(
@@ -164,12 +179,16 @@ async def upload_avatar(
     )
 
 
-@router.delete("/avatar")
+@router.delete(
+    "/avatar",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses=UPDATE_PROFILE_RESPONSES,
+)
 async def delete_avatar(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """Delete user's avatar and reset to default"""
+    """Delete user's avatar"""
     profile = await profile_service.get_profile_by_user_id(
         str(current_user.id), session
     )
@@ -177,23 +196,20 @@ async def delete_avatar(
     if not profile:
         raise NotFound("Profile not found")
 
-    # Delete from Cloudinary if not default
-    default_avatar = "https://res.cloudinary.com/dq0ow9lxw/image/upload/v1732236186/default-image_foxagq.jpg"
-    if profile.avatar_url != default_avatar:
-        public_id = cloudinary_service.extract_public_id_from_url(profile.avatar_url)
-        if public_id:
-            await cloudinary_service.delete_image(public_id)
+    # Delete from Cloudinary
+    public_id = cloudinary_service.extract_public_id_from_url(profile.avatar_url)
+    if public_id:
+        await cloudinary_service.delete_image(public_id)
 
     # Reset to default avatar
-    profile.avatar_url = default_avatar
+    profile.avatar_url = None
     session.add(profile)
     await session.commit()
 
-    return {
-        "status": "success",
-        "message": "Avatar deleted successfully",
-        "avatar_url": default_avatar,
-    }
+    return
+
+
+# NOTE: CAN RETURN 204 AND FRONTEND SHOULD BE ABLE TO DISPLAY DEFAULT URL
 
 
 # NOTE: CAN RETURN 204 AND FRONTEND SHOULD BE ABLE TO DISPLAY DEFAULT URL

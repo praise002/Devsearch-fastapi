@@ -34,10 +34,7 @@ class SkillResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-
-class ProfileResponse(BaseModel):
-    status: str
-    message: str
+class ProfileData(BaseModel):
     # User fields
     id: str
     first_name: str
@@ -59,6 +56,11 @@ class ProfileResponse(BaseModel):
     skills: list[SkillResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
+    
+class ProfileResponse(BaseModel):
+    status: str
+    message: str
+    data: ProfileData
 
 
 class AvatarUploadResponse(BaseModel):

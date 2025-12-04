@@ -171,10 +171,11 @@ class Profile(SQLModel, table=True):
     short_intro: str | None = Field(default=None, max_length=200)
     bio: str | None = None
     location: str | None = Field(default=None, max_length=100)
-    avatar_url: str = Field(
-        default="https://res.cloudinary.com/dq0ow9lxw/image/upload/v1732236186/default-image_foxagq.jpg",
+    # "https://res.cloudinary.com/dq0ow9lxw/image/upload/v1732236186/default-image_foxagq.jpg", - more useful in Django MVT
+    avatar_url: str | None = Field(
+        default=None,
         max_length=200,
-    )  # TODO: have to upload to cloudinary
+    )  
     created_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(

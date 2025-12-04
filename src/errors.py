@@ -304,8 +304,9 @@ class InsufficientPermission(BaseException):
 class NotFound(BaseException):
     """Resource not found"""
 
-    def __init__(self, message: str = "Resource not found"):
+    def __init__(self, status_code: int = 404, message: str = "Resource not found"):
         self.message = message
+        self.status_code = status_code
         super().__init__(self.message)
 
 
@@ -360,7 +361,11 @@ def create_exception_handler(
             detail = initial_detail.copy()
             detail["message"] = exc.message
             return JSONResponse(content=detail, status_code=status_code)
-
-        return JSONResponse(content=initial_detail, status_code=status_code)
+        
+        response_status_code = status_code
+        if hasattr(exc, "status_code") and exc.status_code:
+            response_status_code = exc.status_code
+        
+        return JSONResponse(content=initial_detail, status_code=response_status_code)
 
     return exception_handler

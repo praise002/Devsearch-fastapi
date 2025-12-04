@@ -21,6 +21,8 @@ REFRESH_TOKEN_EXAMPLE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIj
 
 UUID_EXAMPLE = "123e4567-e89b-12d3-a456-426614174000"
 EMAIL_EXAMPLE = "test@gmail.com"
+SUCCESS_EXAMPLE = "success"
+FAILURE_EXAMPLE = "failure"
 
 
 def hash_password(password: str) -> str:
