@@ -135,6 +135,14 @@ class Skill(SQLModel, table=True):
         back_populates="skill",
         passive_deletes="all",
     )
+    created_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(
+            DateTime(timezone=True),
+            server_default=func.now(),
+            nullable=False,
+        ),
+    )
 
     def __repr__(self):
         return self.name

@@ -128,3 +128,28 @@ UPDATE_PROFILE_RESPONSES = {
         }
     },
 }
+
+GET_USER_PROFILE_EXAMPLE = {
+    200: {
+        "content": {
+            "application/json": {
+                "example": {
+                    "status": SUCCESS_EXAMPLE,
+                    "message": "Profile retrieved successfully",
+                    "data": PROFILE_RES_EX,
+                }
+            }
+        }
+    },
+    404: {
+        "content": {
+            "application/json": {
+                "example": {
+                    "status": FAILURE_EXAMPLE,
+                    "message": "Profile for user '<username>' not found",
+                    "err_code": "not_found",
+                }
+            }
+        }
+    },
+}

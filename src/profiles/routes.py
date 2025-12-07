@@ -1,15 +1,8 @@
-# - `GET /api/v1/profiles/` - List profiles
-# - `PATCH /api/v1/profiles/avatar/` - Update user avatar
-# - `DELETE /api/v1/profiles/avatar/` - Delete user avatar
-# - `GET /api/v1/profiles/{username}` - Get user profile
-# - `PATCH /api/v1/profiles/{username}` - Update user profile
-# - `POST /api/v1/profiles/{username}/skills` - Add skill
-# - `PATCH /api/v1/profiles/{username}/skills` - Update a specific skill e.g adding description
-# - `GET /api/v1/profiles/skills` - Retrieve a list of skills
 # - `DELETE /api/v1/profiles/{username}/skills/{skill_id}` - Remove skill
-import logging
 
-from fastapi import APIRouter, Depends, FastAPI, File, UploadFile, status
+from typing import List
+
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -19,17 +12,23 @@ from src.auth.utils import SUCCESS_EXAMPLE
 from src.cloudinary_service import CloudinaryService
 from src.db.main import get_session
 from src.db.models import Profile, ProfileSkill, User
-from src.errors import NotFound
+from src.errors import InsufficientPermission, NotFound, UnprocessableEntity
 from src.profiles.schema_examples import (
+    GET_USER_PROFILE_EXAMPLE,
     GET_USER_PROFILE_RESPONSES,
     UPDATE_PROFILE_RESPONSES,
 )
 from src.profiles.schemas import (
     AvatarUploadResponse,
     ProfileData,
+    ProfileListData,
+    ProfileListResponse,
     ProfileResponse,
     ProfileUpdate,
+    SkillCreate,
+    SkillData,
     SkillResponse,
+    SkillUpdate,
 )
 from src.profiles.service import ProfileService
 
@@ -37,6 +36,47 @@ router = APIRouter()
 
 profile_service = ProfileService()
 cloudinary_service = CloudinaryService()
+
+
+@router.get("/", response_model=List[ProfileListResponse])
+async def get_profiles(
+    search: str = Query(None, description="Search by username, intro, or location"),
+    limit: int = Query(20, ge=1, le=100, description="Number of profiles to return"),
+    offset: int = Query(0, ge=0, description="Number of profiles to skip"),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Get list of all profiles with optional search and pagination
+
+    EXAMPLE:
+    - GET /profiles/ → Returns first 20 profiles
+    - GET /profiles/?search=python → Returns profiles mentioning "python"
+    - GET /profiles/?limit=10&offset=20 → Returns profiles 21-30
+    """
+    profiles = await profile_service.get_all_profiles(
+        session=session, search=search, limit=limit, offset=offset
+    )
+
+    # Convert to response format (add user data)
+    response = []
+    for profile in profiles:
+        response.append(
+            ProfileListResponse(
+                status=SUCCESS_EXAMPLE,
+                message="Profiles retrieved successfully",
+                data=ProfileListData(
+                    id=str(profile.id),
+                    user_id=str(profile.user_id),
+                    username=profile.user.username,
+                    full_name=profile.user.full_name,
+                    short_intro=profile.short_intro,
+                    location=profile.location,
+                    avatar_url=profile.avatar_url,
+                ),
+            )
+        )
+
+    return response
 
 
 @router.get(
@@ -209,7 +249,227 @@ async def delete_avatar(
     return
 
 
-# NOTE: CAN RETURN 204 AND FRONTEND SHOULD BE ABLE TO DISPLAY DEFAULT URL
+@router.get(
+    "/{username}", response_model=ProfileResponse, responses=GET_USER_PROFILE_EXAMPLE
+)
+async def get_user_profile(
+    username: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Get a specific user's profile by their username
+
+    EXAMPLE:
+    - GET /profiles/johndoe → Returns johndoe's profile
+    """
+    profile = await profile_service.get_profile_by_username(username, session)
+
+    if not profile:  # sanme as if profile is None
+        raise NotFound("Profile for user '{username}' not found")
+
+    return {
+        "status": SUCCESS_EXAMPLE,
+        "message": "Profile retrieved successfully",
+        "data": profile,
+    }
+
+
+@router.patch(
+    "/{username}",
+    response_model=ProfileResponse,
+)
+async def update_user_profile(
+    username: str,
+    profile_data: ProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Update a user's profile
+
+    EXAMPLE:
+    - PATCH /profiles/johndoe with {"bio": "New bio"} → Updates johndoe's bio
+    """
+    if current_user.username != username:
+        raise InsufficientPermission(message="You can only update your own profile")
+
+    profile = await profile_service.get_profile_by_username(username, session)
+    if not profile:
+        raise NotFound("Profile for user '{username}' not found")
+
+    update_data = profile_data.model_dump(exclude_unset=True)
+    updated_profile = await profile_service.update_profile(
+        profile, update_data, session
+    )
+
+    return updated_profile
+
+
+@router.post(
+    "/{username}/skills",
+    response_model=SkillResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_skill_to_profile(
+    username: str,
+    skill_data: SkillCreate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Add a new skill to user's profile
+
+    EXAMPLE:
+    - POST /profiles/johndoe/skills with {"name": "Python", "description": "5 years"}
+    - Creates link between johndoe and Python skill
+    """
+
+    if current_user.username != username:
+        raise InsufficientPermission(
+            message="You can only add skills to your own profile"
+        )
+
+    profile = await profile_service.get_profile_by_username(username, session)
+    if not profile:
+        raise NotFound("Profile for user '{username}' not found")
+
+    try:
+        profile_skill = await profile_service.add_skill_to_profile(
+            profile_id=str(profile.id),
+            skill_name=skill_data.name,
+            description=skill_data.description,
+            session=session,
+        )
+    except ValueError as e:
+        raise UnprocessableEntity(str(e))
+
+    return SkillResponse(
+        status=SUCCESS_EXAMPLE,
+        message="Skill added to profile successfully",
+        data=SkillData(
+            id=str(profile_skill.id),
+            name=profile_skill.skill.name,
+            description=profile_skill.description,
+            created_at=profile_skill.created_at,
+        ),
+    )
+
+
+@router.get("/{username}/skills", response_model=List[SkillResponse])
+async def get_user_skills(
+    username: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Get all skills for a specific user
+
+    EXAMPLE:
+    - GET /profiles/johndoe/skills
+    - Returns: [{"name": "Python", "description": "5 years"}, ...]
+    """
+    profile = await profile_service.get_profile_by_username(username, session)
+    if not profile:
+        raise NotFound("Profile for user '{username}' not found")
+
+    skills = await profile_service.get_profile_skills(str(profile.id), session)
+
+    return [
+        SkillResponse(
+            status=SUCCESS_EXAMPLE,
+            message="Skills retrieved successfully",
+            data=SkillData(
+                id=str(skill.id),
+                name=skill.skill.name,
+                description=skill.description,
+                created_at=skill.created_at,
+            ),
+        )
+        for skill in skills
+    ]
+
+
+@router.patch("/{username}/skills/{skill_id}", response_model=SkillResponse)
+async def update_skill(
+    username: str,
+    skill_id: str,
+    skill_data: SkillUpdate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Update a specific skill in user's profile
+
+    EXAMPLE:
+    - PATCH /profiles/johndoe/skills/123 with {"description": "10 years"}
+    - Updates description of skill 123 in johndoe's profile
+    """
+    if current_user.username != username:
+        raise InsufficientPermission(message="You can only update your own skills")
+
+    profile = await profile_service.get_profile_by_username(username, session)
+    if not profile:
+        raise NotFound("Profile for user '{username}' not found")
+
+    profile_skill = await profile_service.get_profile_skill(
+        skill_id=skill_id, profile_id=str(profile.id), session=session
+    )
+
+    if not profile_skill:
+        raise NotFound("Skill not found in profile")
+
+    update_data = skill_data.model_dump(exclude_unset=True)
+    updated_skill = await profile_service.update_profile_skill(
+        profile_skill, update_data, session
+    )
+
+    return SkillResponse(
+        status=SUCCESS_EXAMPLE,
+        message="Skill updated successfully",
+        data=SkillData(
+            id=str(updated_skill.id),
+            name=updated_skill.skill.name,
+            description=updated_skill.description,
+            created_at=updated_skill.created_at,
+        ),
+    )
+
+
+@router.delete("/{username}/skills/{skill_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_skill(
+    username: str,
+    skill_id: str,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Remove a skill from user's profile
+
+    NOTE: This only removes the link, not the skill itself
+    - Skill still exists in Skills table
+    - Other users can still have this skill
+
+    EXAMPLE:
+    - DELETE /profiles/johndoe/skills/123
+    - Removes skill 123 from johndoe's profile
+    """
+
+    if current_user.username != username:
+        raise InsufficientPermission("You can only delete your own skills")
+
+    profile = await profile_service.get_profile_by_username(username, session)
+    if not profile:
+        raise NotFound(f"Profile for user '{username}' not found")
+
+    profile_skill = await profile_service.get_profile_skill(
+        skill_id=skill_id, profile_id=str(profile.id), session=session
+    )
+
+    if not profile_skill:
+        raise NotFound("Skill not found in profile")
+
+    await profile_service.delete_profile_skill(profile_skill, session)
+
+    return None
 
 
 # NOTE: CAN RETURN 204 AND FRONTEND SHOULD BE ABLE TO DISPLAY DEFAULT URL

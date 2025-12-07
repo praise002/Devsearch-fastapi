@@ -217,6 +217,18 @@ def register_all_errors(app: FastAPI):
             status_code=status.HTTP_400_BAD_REQUEST,
             initial_detail={
                 "status": "failure",
+                "message": "The request could not be processed due to validation errors",
+                "err_code": "unprocessable_entity",
+            },
+        ),
+    )
+
+    app.add_exception_handler(
+        UnprocessableEntity,
+        create_exception_handler(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            initial_detail={
+                "status": "failure",
                 "message": "No filename provided",
                 "err_code": "no_filename_provided",
             },
@@ -295,18 +307,51 @@ class InvalidCredentials(BaseException):
     pass
 
 
+class UnprocessableEntity(BaseException):
+    """
+    Raised when the request is well-formed but contains semantic errors
+    that prevent processing.
+
+    This covers validation failures, business logic errors, and constraint
+    violations that don't fit specific exception types like UserAlreadyExists
+    or PasswordMismatch.
+
+    Examples:
+    - Invalid field values that pass basic type checking but fail business rules
+    - Constraints violations (e.g., min/max length, patterns, ranges)
+    - Related entity validation errors
+    - Duplicate resource conflicts
+    - Invalid state transitions
+
+    Use this for general 422 errors when more specific exceptions don't apply.
+    """
+
+    def __init__(
+        self,
+        message: str = "The request could not be processed due to validation errors",
+        err_code: str = "unprocessable_entity",
+    ):
+        self.message = message
+        self.err_code = err_code
+        super().__init__(self.message)
+
+
 class InsufficientPermission(BaseException):
     """User does not have the neccessary permissions to perform an action"""
 
-    pass
+    def __init__(
+        self,
+        message: str = "You do not have sufficient permissions to perform this action",
+    ):
+        self.message = message
+        super().__init__(self.message)
 
 
 class NotFound(BaseException):
     """Resource not found"""
 
-    def __init__(self, status_code: int = 404, message: str = "Resource not found"):
+    def __init__(self, message: str = "Resource not found"):
         self.message = message
-        self.status_code = status_code
         super().__init__(self.message)
 
 
@@ -361,11 +406,11 @@ def create_exception_handler(
             detail = initial_detail.copy()
             detail["message"] = exc.message
             return JSONResponse(content=detail, status_code=status_code)
-        
+
         response_status_code = status_code
         if hasattr(exc, "status_code") and exc.status_code:
             response_status_code = exc.status_code
-        
+
         return JSONResponse(content=initial_detail, status_code=response_status_code)
 
     return exception_handler

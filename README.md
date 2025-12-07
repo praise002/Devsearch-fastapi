@@ -24,15 +24,13 @@ A powerful FastAPI-based platform designed to connect developers worldwide, enab
 - ✅ JWT authentication implementation
 - ✅ Login/logout endpoints
 - ✅ Password reset functionality
-- [ ] User profile CRUD operations
+- ✅ User profile CRUD operations
 - [ ] User role management
 
 ### 📅 Phase 3: Core Features (PLANNED)
 #### Profile Management
-- [ ] Profile picture upload (Cloudinary integration)
-- [ ] Skills management (add/remove skills)
-- [ ] Social links management
-- [ ] Profile visibility settings
+- ✅ Profile picture upload (Cloudinary integration)
+- ✅ Skills management (add/remove skills)
 
 #### Project Management
 - [ ] Project CRUD operations
@@ -182,7 +180,7 @@ src/
 - `GET /api/v1/auth/google` - Initiate Google OAuth login
 - `GET /api/v1/auth/google/callback` - Handle Google OAuth callback
 
-### Profiles (Planned)
+### Profiles (Implemented)
 - `GET /api/v1/profiles/` - List profiles
 - `PATCH /api/v1/profiles/image/` - Update user image
 - `DELETE /api/v1/profiles/image/` - Delete user image
@@ -196,11 +194,16 @@ src/
 ### Projects (Planned)
 - `GET /api/v1/projects/` - List projects
 - `POST /api/v1/projects/` - Create project
-- `GET /api/v1/projects/{id}` - Get project
-- `PUT /api/v1/projects/{id}` - Update project
-- `DELETE /api/v1/projects/{id}` - Delete project
-- `POST /api/v1/projects/{id}/reviews` - Add review
-
+- `GET /api/v1/projects/{slug}` - Get project
+- `PUT /api/v1/projects/{slug}` - Update project
+- `DELETE /api/v1/projects/{slug}` - Delete project
+- `POST /api/v1/projects/{slug}/reviews` - Add review
+- `GET /api/v1/projects/{slug}/reviews` - Retrieve reviews
+- `PATCH /api/v1/projects/{slug}/tags` - Add tag to project
+- `DELETE /api/v1/projects/{slug}/tags/{tag_id}` - Remove a tag from a project
+- `GET /api/v1/projects/tags` - Get tags
+- `GET /api/v1/projects/{slug}/related-projects` - Retrieve related projects
+  
 ### Messages (Planned)
 - `GET /api/v1/messages/` - List messages
 - `POST /api/v1/messages/` - Send message
