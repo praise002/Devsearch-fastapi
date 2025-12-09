@@ -12,8 +12,8 @@ class SkillCreate(BaseModel):
 
 
 class SkillUpdate(BaseModel):
-    name: str = Field(default=None, min_length=1, max_length=100)
-    description: str = Field(None, max_length=500)
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    description: str | None = Field(None, max_length=500)
 
 
 class SkillData(BaseModel):
@@ -79,8 +79,8 @@ class ProfileData(BaseModel):
 
 
 class ProfileResponse(BaseModel):
-    status: str 
-    message: str 
+    status: str
+    message: str
     data: ProfileData
 
 

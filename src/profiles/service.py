@@ -63,7 +63,7 @@ class ProfileService:
     ):
         """Update profile with new data"""
         for key, value in update_data.items():
-            if value is not None:
+            # if value is not None:
                 setattr(profile, key, value)
 
         session.add(profile)

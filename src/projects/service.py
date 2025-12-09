@@ -1,0 +1,262 @@
+from typing import List, Optional
+
+from slugify import slugify
+from sqlmodel import col, func, or_, select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from src.cloudinary_service import CloudinaryService
+from src.constants import VoteType
+from src.db.models import Profile, Project, Review, Tag, User
+
+
+class ProjectService:
+    """Handles all project-related database operations"""
+
+    async def get_all_projects(
+        self,
+        session: AsyncSession,
+        search: Optional[str] = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> List[Project]:
+        """
+        Get list of projects with optional search
+        """
+        statement = select(Project).join(Profile).join(User)
+
+        if search:
+            pattern = f"%{search}%"
+            statement = statement.where(
+                or_(Project.title.ilike(pattern), Project.description.ilike(pattern))
+            )
+
+        # Order by popularity
+        statement = statement.order_by(col(Project.vote_total).desc())
+
+        statement = statement.offset(offset).limit(limit)
+
+        result = await session.exec(statement)
+        return result.all()
+
+    async def get_project_by_slug(
+        self, slug: str, session: AsyncSession
+    ) -> Optional[Project]:
+        """
+        Get project by its slug
+        """
+        statement = select(Project).where(Project.slug == slug)
+        result = await session.exec(statement)
+        return result.first()
+
+    async def create_project(
+        self, project_data: dict, owner_id: str, session: AsyncSession
+    ) -> Project:
+        """
+        Create a new project
+        """
+
+        slug = slugify(project_data["title"])
+
+        existing = await self.get_project_by_slug(slug, session)
+        if existing:
+            # Make slug unique by adding number
+            counter = 1
+            while existing:
+                slug = f"{slugify(project_data['title'])}-{counter}"
+                existing = await self.get_project_by_slug(slug, session)
+                counter += 1
+
+        new_project = Project(**project_data, slug=slug, owner_id=owner_id)
+
+        session.add(new_project)
+        await session.commit()
+        await session.refresh(new_project)
+        return new_project
+
+    async def update_project(
+        self, project: Project, update_data: dict, session: AsyncSession
+    ) -> Project:
+        """
+        Update project fields
+        """
+        for key, value in update_data.items():
+            setattr(project, key, value)
+
+        # If title changed, update slug
+        if "title" in update_data:
+            project.slug = slugify(update_data["title"])  # TODO: ENSURE UNIWUENESS
+
+        session.add(project)
+        await session.commit()
+        await session.refresh(project)
+        return project
+
+    async def delete_project(self, project: Project, session: AsyncSession) -> None:
+        """
+        Delete project and all related data
+        """
+        public_id = CloudinaryService.extract_public_id_from_url(project.featured_image)
+        if public_id:
+            await CloudinaryService.delete_image(public_id)
+
+        await session.delete(project)
+        await session.commit()
+
+    async def get_or_create_tag(self, tag_name: str, session: AsyncSession) -> Tag:
+        """
+        Get existing tag or create new one
+
+        WHY? Tags are reusable across projects
+        Example: "React" tag should be shared by all React projects
+        """
+        statement = select(Tag).where(Tag.name.ilike(tag_name))
+        result = await session.exec(statement)
+        tag = result.first()
+
+        if tag:
+            return tag
+
+        new_tag = Tag(name=tag_name.title())
+        session.add(new_tag)
+        await session.commit()
+        await session.refresh(new_tag)
+        return new_tag
+
+    async def add_tag_to_project(
+        self, project: Project, tag_name: str, session: AsyncSession
+    ) -> Tag:
+        """
+        Add tag to project
+        """
+        tag = await self.get_or_create_tag(tag_name, session)
+
+        if tag in project.tags:
+            raise ValueError("Tag already exists on this project")
+
+        project.tags.append(tag)
+        session.add(project)
+        await session.commit()
+        await session.refresh(project)
+        return tag
+
+    async def remove_tag_from_project(
+        self, project: Project, tag_id: str, session: AsyncSession
+    ) -> None:
+        """
+        Remove tag from project
+        """
+        tag = await session.get(Tag, tag_id)
+        if not tag or tag not in project.tags:
+            raise ValueError("Tag not found on this project")
+
+        # Remove the link between project and tag
+        project.tags.remove(tag)
+        session.add(project)
+        await session.commit()
+
+    async def get_all_tags(self, session: AsyncSession) -> List[Tag]:
+        """Get all available tags"""
+        statement = select(Tag).order_by(Tag.name)
+        result = await session.exec(statement)
+        return result.all()
+
+    async def create_review(
+        self,
+        project_id: str,
+        reviewer_profile_id: str,
+        review_data: dict,
+        session: AsyncSession,
+    ) -> Review:
+        """
+        Create a review for a project
+        """
+        existing = await session.exec(
+            select(Review).where(
+                Review.project_id == project_id,
+                Review.profile_id == reviewer_profile_id,
+            )
+        )
+        if existing.first():
+            raise ValueError("You have already reviewed this project")
+
+        new_review = Review(
+            project_id=project_id, profile_id=reviewer_profile_id, **review_data
+        )
+
+        session.add(new_review)
+        await session.commit()
+        await session.refresh(new_review)
+
+        await self.update_project_votes(project_id, session)
+
+        return new_review
+
+    async def get_project_reviews(
+        self, project_id: str, session: AsyncSession
+    ) -> List[Review]:
+        """Get all reviews for a project"""
+        statement = (
+            select(Review)
+            .where(Review.project_id == project_id)
+            .order_by(col(Review.created_at).desc())
+        )
+        result = await session.exec(statement)
+        return result.all()
+
+    async def update_project_votes(
+        self, project_id: str, session: AsyncSession
+    ) -> None:
+        """
+        Recalculate project vote statistics
+        """
+        project = await session.get(Project, project_id)
+        if not project:
+            return
+
+        # Count total reviews
+        total_reviews = await session.exec(
+            select(func.count(Review.id)).where(Review.project_id == project_id)
+        )
+        vote_total = total_reviews.first() or 0
+
+        upvotes = await session.exec(
+            select(func.count(Review.id)).where(
+                Review.project_id == project_id, Review.value == VoteType.up
+            )
+        )
+        upvote_count = upvotes.first() or 0
+
+        # Calculate ratio
+        if vote_total > 0:
+            vote_ratio = int((upvote_count / vote_total) * 100)
+        else:
+            vote_ratio = 0
+
+        project.vote_total = vote_total
+        project.vote_ratio = vote_ratio
+        session.add(project)
+        await session.commit()
+
+    async def get_related_projects(
+        self, project: Project, session: AsyncSession, limit: int = 6
+    ) -> List[Project]:
+        """
+        Get projects related to current project
+        """
+        if not project.tags:
+            return []
+
+        tag_ids = [tag.id for tag in project.tags]
+
+        statement = (
+            select(Project)
+            .join(Tag)
+            .where(
+                Tag.id.in_(tag_ids), Project.id != project.id  # Exclude current project
+            )
+            .order_by(col(Project.vote_total).desc())
+            .limit(limit)
+        )
+
+        result = await session.exec(statement)
+        return result.all()

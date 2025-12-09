@@ -1,5 +1,3 @@
-# - `DELETE /api/v1/profiles/{username}/skills/{skill_id}` - Remove skill
-
 from typing import List
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
