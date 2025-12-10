@@ -1,12 +1,11 @@
 from datetime import datetime
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.constants import VoteType
 
 
-class TagResponse(BaseModel):
+class TagResponseData(BaseModel):
     id: str
     name: str
     created_at: datetime
@@ -14,7 +13,13 @@ class TagResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ProjectCReate(BaseModel):
+class TagResponse(BaseModel):
+    status: str
+    message: str
+    data: TagResponseData
+
+
+class ProjectCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: str
     featured_image: str
@@ -37,7 +42,7 @@ class ProjectOwnerInfo(BaseModel):
     avatar_url: str | None = None
 
 
-class ProjectResponse(BaseModel):
+class ProjectResponseData(BaseModel):
     id: str
     title: str
     slug: str
@@ -52,13 +57,17 @@ class ProjectResponse(BaseModel):
     owner: ProjectOwnerInfo
     tags: list[TagResponse] = []
     reviews: list["ReviewResponse"] = []
-    
+
     model_config = ConfigDict(from_attributes=True)
-    
-class ProjectListResponse(BaseModel):
-    """
-    Simplified project info for listing
-    """
+
+
+class ProjectResponse(BaseModel):
+    status: str
+    message: str
+    data: ProjectResponseData
+
+
+class ProjectListResponseData(BaseModel):
     id: str
     title: str
     slug: str
@@ -68,14 +77,26 @@ class ProjectListResponse(BaseModel):
     vote_ratio: int
     owner: ProjectOwnerInfo
     tags: list[TagResponse] = []
-    
+
     model_config = ConfigDict(from_attributes=True)
 
+
+class ProjectListResponse(BaseModel):
+    """
+    Simplified project info for listing
+    """
+
+    status: str
+    message: str
+    data: ProjectListResponseData
+
+
 class ReviewCreate(BaseModel):
-    value: VoteType  
+    value: VoteType
     content: str = Field(min_length=1, max_length=1000)
-    
-class ReviewResponse(BaseModel):
+
+
+class ReviewResponseData(BaseModel):
     id: str
     value: VoteType
     content: str
@@ -85,11 +106,19 @@ class ReviewResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ReviewResponse(BaseModel):
+    status: str
+    message: str
+    data: ReviewResponseData
+
+
 class TagCreate(BaseModel):
     name: str = Field(min_length=1, max_length=50)
 
+
 class ImageUploadResponse(BaseModel):
     """Response after uploading project image"""
+
     status: str
     message: str
     image_url: str
