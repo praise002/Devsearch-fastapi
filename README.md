@@ -191,7 +191,7 @@ src/
 - `GET /api/v1/profiles/skills` - Retrieve a list of skills
 - `DELETE /api/v1/profiles/{username}/skills/{skill_id}` - Remove skill
 
-### Projects (Planned)
+### Projects (Implemented)
 - `GET /api/v1/projects/` - List projects
 - `POST /api/v1/projects/` - Create project
 - `GET /api/v1/projects/{slug}` - Get project
@@ -204,12 +204,12 @@ src/
 - `GET /api/v1/projects/tags` - Get tags
 - `GET /api/v1/projects/{slug}/related-projects` - Retrieve related projects
   
-### Messages (Planned)
+### Messages (Implemented)
 - `GET /api/v1/messages/` - List messages
 - `POST /api/v1/messages/` - Send message
 - `GET /api/v1/messages/{id}` - Get message
 - `PUT /api/v1/messages/{id}` - Mark as read
-
+- `PUT /api/v1/messages/{id}` - Mark as unread
 
 ## Resources
 - [How to send an email in fastapi](https://medium.com/nerd-for-tech/how-to-send-email-using-python-fastapi-947921059f0c)

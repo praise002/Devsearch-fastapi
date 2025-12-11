@@ -19,7 +19,6 @@ from src.projects.schemas import (
     ImageUploadResponse,
     ProjectCreate,
     ProjectListResponse,
-    ProjectListResponseData,
     ProjectOwnerInfo,
     ProjectResponse,
     ProjectResponseData,

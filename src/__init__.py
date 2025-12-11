@@ -1,3 +1,4 @@
+from fastapi.responses import RedirectResponse
 import jinja2
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -8,6 +9,7 @@ from starlette_admin.contrib.sqla import Admin, ModelView
 from src.auth.routes import router as auth_router
 from src.profiles.routes import router as profile_router
 from src.projects.routes import router as project_router
+from src.messaging.routes import router as message_router
 from src.db.main import async_engine
 from src.db.models import User
 from src.errors import register_all_errors
@@ -69,7 +71,8 @@ admin = Admin(async_engine, title="Devsearch")
 app.include_router(auth_router, prefix=f"/api/{version}/auth", tags=["Auth"])
 app.include_router(profile_router, prefix=f"/api/{version}/profiles", tags=["Profiles"])
 app.include_router(project_router, prefix=f"/api/{version}/projects", tags=["Projects"])
+app.include_router(message_router, prefix=f"/api/{version}/messages", tags=["Messages"])
 
-# @app.get("/")
-# async def root():
-#     return {"message": "Welcome to DevSearch API"}
+@app.get("/", include_in_schema=False)
+async def root():
+    return RedirectResponse(url=f"/api/{version}/docs")
