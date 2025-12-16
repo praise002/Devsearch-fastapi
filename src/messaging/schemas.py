@@ -38,7 +38,7 @@ class MessageSendResponseData(BaseModel):
 class MessageSendResponse(BaseModel):
     status: str            
     message: str 
-    data: MessageSendResponseData          
+    # data: MessageSendResponseData          
 
 class MessageListResponseData(BaseModel):
     id: str
@@ -53,10 +53,15 @@ class MessageListResponseData(BaseModel):
 class MessageListResponse(BaseModel):
     status: str
     message: str
-    data: MessageListResponseData
+    data: list[MessageListResponseData]
     
 class MessageMarkResponse(BaseModel):
     """Response after marking message as read or unread"""
     status: str
     message: str
     is_read: bool
+    
+class MessageUnreadCountResponse(BaseModel):
+    status: str
+    message: str
+    unread_count: int

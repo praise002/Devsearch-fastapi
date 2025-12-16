@@ -84,7 +84,7 @@ class ProjectService:
 
         # If title changed, update slug
         if "title" in update_data:
-            project.slug = slugify(update_data["title"])  # TODO: ENSURE UNIWUENESS
+            project.slug = slugify(update_data["title"])  # TODO: ENSURE UNIQUENESS
 
         session.add(project)
         await session.commit()
@@ -139,6 +139,55 @@ class ProjectService:
         await session.refresh(project)
         return tag
 
+    async def add_tags_to_project(
+        self, project: Project, tags_string: str, session: AsyncSession
+    ) -> List[Tag]:
+        """
+        Add multiple tags to project from comma-separated string
+
+        Args:
+            project: The project to add tags to
+            tags_string: Comma-separated tag names (e.g., "React, TypeScript, Node.js")
+            session: Database session
+
+        Returns:
+            List of Tag objects that were added
+
+        Example:
+            tags = await service.add_tags_to_project(
+                project,
+                "Python, FastAPI, PostgreSQL",
+                session
+            )
+        """
+        # Split by comma and clean up each tag name
+        tag_names = [tag.strip() for tag in tags_string.split(",") if tag.strip()]
+
+        if not tag_names:
+            raise ValueError("No valid tags provided")
+
+        added_tags = []
+        existing_tag_names = [tag.name.lower() for tag in project.tags]
+
+        for tag_name in tag_names:
+            # Skip if tag already exists on project
+            if tag_name.lower() in existing_tag_names:
+                continue
+
+            # Get or create tag
+            tag = await self.get_or_create_tag(tag_name, session)
+
+            # Add to project
+            project.tags.append(tag)
+            added_tags.append(tag)
+
+        if added_tags:
+            session.add(project)
+            await session.commit()
+            await session.refresh(project)
+
+        return added_tags
+
     async def remove_tag_from_project(
         self, project: Project, tag_id: str, session: AsyncSession
     ) -> None:
@@ -153,6 +202,55 @@ class ProjectService:
         project.tags.remove(tag)
         session.add(project)
         await session.commit()
+
+    async def remove_tags_from_project(
+        self, project: Project, tags_string: str, session: AsyncSession
+    ) -> List[Tag]:
+        """
+        Remove multiple tags from project from comma-separated string
+
+        Args:
+            project: The project to remove tags from
+            tags_string: Comma-separated tag names (e.g., "React, TypeScript, Node.js")
+            session: Database session
+
+        Returns:
+            List of Tag objects that were removed
+
+        Example:
+            removed_tags = await service.remove_tags_from_project(
+                project,
+                "Python, FastAPI, PostgreSQL",
+                session
+            )
+        """
+        # Split by comma and clean up each tag name
+        tag_names = [tag.strip() for tag in tags_string.split(",") if tag.strip()]
+
+        if not tag_names:
+            raise ValueError("No valid tags provided")
+
+        removed_tags = []
+        project_tag_map = {tag.name.lower(): tag for tag in project.tags}
+
+        for tag_name in tag_names:
+            # Find tag in project's current tags (case-insensitive)
+            tag = project_tag_map.get(tag_name.lower())
+
+            if not tag:
+                # Tag not found on project, skip it
+                continue
+
+            # Remove tag from project
+            project.tags.remove(tag)
+            removed_tags.append(tag)
+
+        if removed_tags:
+            session.add(project)
+            await session.commit()
+            await session.refresh(project)
+
+        return removed_tags
 
     async def get_all_tags(self, session: AsyncSession) -> List[Tag]:
         """Get all available tags"""

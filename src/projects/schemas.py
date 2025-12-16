@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from fastapi import File
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.constants import VoteType
@@ -19,10 +20,16 @@ class TagResponse(BaseModel):
     data: TagResponseData
 
 
+class TagListResponse(BaseModel):
+    status: str
+    message: str
+    data: list[TagResponseData]
+
+
 class ProjectCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: str
-    featured_image: str
+    featured_image: str | None = None
     source_link: str | None = Field(default=None, max_length=200)
     demo_link: str | None = Field(default=None, max_length=200)
 
@@ -88,7 +95,7 @@ class ProjectListResponse(BaseModel):
 
     status: str
     message: str
-    data: ProjectListResponseData
+    data: list[ProjectListResponseData]
 
 
 class ReviewCreate(BaseModel):
@@ -109,16 +116,8 @@ class ReviewResponseData(BaseModel):
 class ReviewResponse(BaseModel):
     status: str
     message: str
-    data: ReviewResponseData
+    data: list[ReviewResponseData]
 
 
 class TagCreate(BaseModel):
     name: str = Field(min_length=1, max_length=50)
-
-
-class ImageUploadResponse(BaseModel):
-    """Response after uploading project image"""
-
-    status: str
-    message: str
-    image_url: str

@@ -1,4 +1,9 @@
-from src.auth.utils import ACCESS_TOKEN_EXAMPLE, EMAIL_EXAMPLE, REFRESH_TOKEN_EXAMPLE
+from src.auth.utils import (
+    ACCESS_TOKEN_EXAMPLE,
+    EMAIL_EXAMPLE,
+    FAILURE_EXAMPLE,
+    REFRESH_TOKEN_EXAMPLE,
+)
 
 # VALIDATION_ERROR = {
 #     "detail": [{"loc": ["string", 0], "msg": "string", "type": "string"}]
@@ -6,6 +11,18 @@ from src.auth.utils import ACCESS_TOKEN_EXAMPLE, EMAIL_EXAMPLE, REFRESH_TOKEN_EX
 
 VALIDATION_ERROR = {
     "value": {"detail": [{"loc": ["string", 0], "msg": "string", "type": "string"}]},
+}
+
+UNAUTHORIZED = {
+    "content": {
+        "application/json": {
+            "example": {
+                "status": FAILURE_EXAMPLE,
+                "message": "Please provide a valid access token.",
+                "err_code": "access_token_required",
+            }
+        }
+    }
 }
 
 REGISTER_RESPONSES = {

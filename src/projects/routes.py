@@ -1,8 +1,3 @@
-# - `PATCH /api/v1/projects/{slug}/tags` - Add tag to project
-# - `DELETE /api/v1/projects/{slug}/tags/{tag_id}` - Remove a tag from a project
-# - `GET /api/v1/projects/tags` - Get tags
-# - `GET /api/v1/projects/{slug}/related-projects` - Retrieve related projects
-
 from typing import List
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
@@ -15,8 +10,17 @@ from src.db.main import get_session
 from src.db.models import User
 from src.errors import InsufficientPermission, NotFound, UnprocessableEntity
 from src.profiles.service import ProfileService
+from src.projects.schema_examples import (
+    ADD_TAGS_PROJECT_RESPONSES,
+    CREATE_PROJECT_RESPONSES,
+    CREATE_REVIEW_RESPONSES,
+    DELETE_PROJECT_RESPONSES,
+    GET_ALL_TAGS_RESPONSES,
+    GET_RELATED_PROJECTS_RESPONSES,
+    REMOVE_TAGS_PROJECT_RESPONSES,
+    UPDATE_PROJECT_RESPONSES,
+)
 from src.projects.schemas import (
-    ImageUploadResponse,
     ProjectCreate,
     ProjectListResponse,
     ProjectOwnerInfo,
@@ -26,6 +30,7 @@ from src.projects.schemas import (
     ReviewCreate,
     ReviewResponse,
     TagCreate,
+    TagListResponse,
     TagResponse,
 )
 from src.projects.service import ProjectService
@@ -84,7 +89,7 @@ def build_project_response(project) -> ProjectResponse:
     )
 
 
-@router.get("/", response_model=List[ProjectListResponse])
+@router.get("/", response_model=ProjectListResponse)
 async def get_projects(
     search: str = Query(None, description="Search by title or description"),
     limit: int = Query(20, ge=1, le=100, description="Number of projects"),
@@ -150,9 +155,15 @@ async def get_projects(
     }
 
 
-@router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    responses=CREATE_PROJECT_RESPONSES,
+    response_model=ProjectResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_project(
     project_data: ProjectCreate,
+    featured_image: UploadFile = File(None, description="Project featured image"),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
@@ -163,11 +174,22 @@ async def create_project(
         str(current_user.id), session
     )
 
-    if not profile:
-        raise NotFound("Profile not found")
+    featured_image_url = None
+    if featured_image:
+        public_id = f"project_{current_user.id}_{featured_image.filename}"
+        upload_result = await cloudinary_service.upload_image(
+            file=featured_image,
+            folder="project_images",
+            public_id=public_id,
+        )
+        featured_image_url = upload_result["url"]
+
+    project_dict = project_data.model_dump()
+    if featured_image_url:
+        project_dict["featured_image"] = featured_image_url
 
     new_project = await project_service.create_project(
-        project_data=project_data.model_dump(),
+        project_data=project_dict,
         owner_id=str(profile.id),
         session=session,
     )
@@ -199,7 +221,9 @@ async def get_project(
     }
 
 
-@router.put("/{slug}", response_model=ProjectResponse)
+@router.patch(
+    "/{slug}", responses=UPDATE_PROJECT_RESPONSES, response_model=ProjectResponse
+)
 async def update_project(
     slug: str,
     project_data: ProjectUpdate,
@@ -229,7 +253,11 @@ async def update_project(
     }
 
 
-@router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{slug}",
+    responses=DELETE_PROJECT_RESPONSES,
+    status_code=status.HTTP_204_NO_CONTENT,
+)
 async def delete_project(
     slug: str,
     current_user: User = Depends(get_current_user),
@@ -252,33 +280,48 @@ async def delete_project(
     return None  # 204 No Content
 
 
-@router.post("/images", response_model=ImageUploadResponse)
-async def upload_project_image(
-    file: UploadFile = File(description="Project image file"),
+@router.patch(
+    "/{slug}/image", responses=UPDATE_PROJECT_RESPONSES, response_model=ProjectResponse
+)
+async def update_project_image(
+    slug: str,
+    featured_image: UploadFile = File(description="New project image"),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """
-    Upload project featured image to Cloudinary
+    Update project's featured image
     """
-    public_id = f"project_{current_user.id}_{file.filename}"
+    project = await project_service.get_project_by_slug(slug, session)
 
+    if not project:
+        raise NotFound(f"Project with slug '{slug}' not found")
+
+    if str(project.owner_id) != str(current_user.id):
+        raise InsufficientPermission("You can only update your own projects")
+
+    public_id = f"project_{current_user.id}_{slug}"
     upload_result = await cloudinary_service.upload_image(
-        file=file,
+        file=featured_image,
         folder="project_images",
         public_id=public_id,
-        overwrite=False,  # Don't overwrite, create unique names
+        overwrite=True,  # Replace existing image
+    )
+
+    updated_project = await project_service.update_project(
+        project, {"featured_image": upload_result["url"]}, session
     )
 
     return {
         "status": SUCCESS_EXAMPLE,
-        "message": "Image uploaded successfully",
-        "data": upload_result["url"],
+        "message": "Project image updated successfully",
+        "data": updated_project,
     }
 
 
 @router.post(
     "/{slug}/reviews",
+    responses=CREATE_REVIEW_RESPONSES,
     response_model=ReviewResponse,
     status_code=status.HTTP_201_CREATED,
 )
@@ -301,9 +344,6 @@ async def create_review(
         str(current_user.id), session
     )
 
-    if not profile:
-        raise NotFound("Profile not found")
-
     # Can't review your own project
     if str(project.owner_id) == str(profile.id):
         raise UnprocessableEntity("You cannot review your own project")
@@ -325,7 +365,9 @@ async def create_review(
     }
 
 
-@router.get("/{slug}/reviews", response_model=List[ReviewResponse])
+@router.get(
+    "/{slug}/reviews", responses=CREATE_REVIEW_RESPONSES, response_model=ReviewResponse
+)
 async def get_project_reviews(
     slug: str,
     session: AsyncSession = Depends(get_session),
@@ -347,10 +389,14 @@ async def get_project_reviews(
     }
 
 
-@router.patch("/{slug}/tags", response_model=TagResponse)
-async def add_tag_to_project(
+@router.patch(
+    "/{slug}/tags", responses=ADD_TAGS_PROJECT_RESPONSES, response_model=TagListResponse
+)
+async def add_tags_to_project(
     slug: str,
-    tag_data: TagCreate,
+    tags: str = Query(
+        description="Comma-separated tag names (e.g., 'React, TypeScript, Node.js')"
+    ),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
@@ -366,21 +412,27 @@ async def add_tag_to_project(
         raise InsufficientPermission("You can only add tags to your own projects")
 
     try:
-        tag = await project_service.add_tag_to_project(project, tag_data.name, session)
+        added_tags = await project_service.add_tags_to_project(project, tags, session)
     except ValueError as e:
         raise UnprocessableEntity(str(e))
 
     return {
         "status": SUCCESS_EXAMPLE,
-        "message": "Tag retrieved successfully",
-        "data": tag,
+        "message": f"{len(added_tags)} tag(s) added to project",
+        "data": added_tags,
     }
 
 
-@router.delete("/{slug}/tags/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{slug}/tags",
+    responses=REMOVE_TAGS_PROJECT_RESPONSES,
+    status_code=status.HTTP_204_NO_CONTENT,
+)
 async def remove_tag_from_project(
     slug: str,
-    tag_id: str,
+    tags: str = Query(
+        description="Comma-separated tag names to remove (e.g., 'React, TypeScript')"
+    ),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
@@ -392,20 +444,25 @@ async def remove_tag_from_project(
     if not project:
         raise NotFound(f"Project with slug '{slug}' not found")
 
-    # Security check
     if str(project.owner_id) != str(current_user.id):
         InsufficientPermission("You can only remove tags from your own projects")
 
     try:
-        await project_service.remove_tag_from_project(project, tag_id, session)
+        removed_tags = await project_service.remove_tags_from_project(
+            project, tags, session
+        )
     except ValueError as e:
-        raise NotFound(str(e))
+        raise UnprocessableEntity(str(e))
+
+    if not removed_tags:
+        raise NotFound("None of the specified tags were found on this project")
 
     return None
 
 
-@router.get("/tags", response_model=List[TagResponse])
+@router.get("/tags", responses=GET_ALL_TAGS_RESPONSES, response_model=List[TagResponse])
 async def get_all_tags(
+    _: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """
@@ -420,7 +477,11 @@ async def get_all_tags(
     }
 
 
-@router.get("/{slug}/related-projects", response_model=List[ProjectListResponse])
+@router.get(
+    "/{slug}/related-projects",
+    responses=GET_RELATED_PROJECTS_RESPONSES,
+    response_model=ProjectListResponse,
+)
 async def get_related_projects(
     slug: str,
     limit: int = Query(6, ge=1, le=20),
@@ -441,6 +502,3 @@ async def get_related_projects(
         "message": "Related projects retrieved successfully",
         "data": [p for p in related],
     }
-
-
-# TODO: CREATE SCHEMA EXAMPLES TO ADD THE ERROR MESSAGES NOT ADDED BY DEFAULT

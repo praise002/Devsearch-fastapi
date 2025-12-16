@@ -1,5 +1,3 @@
-from typing import List
-
 from fastapi import APIRouter, Depends, Query, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -7,12 +5,21 @@ from src.auth.dependencies import get_current_user
 from src.auth.utils import SUCCESS_EXAMPLE
 from src.db.main import get_session
 from src.db.models import User
-from src.errors import NotFound
+from src.errors import InsufficientPermission, NotFound
+from src.messaging.schema_examples import (
+    DELETE_RESPONSES,
+    GET_MESSAGE_RESPONSES,
+    GET_UNREAD_COUNT_RESPONSES,
+    GET_USER_MESSAGES_RESPONSES,
+    MARK_MESSAGE_RESPONSES,
+)
 from src.messaging.schemas import (
     MessageCreate,
     MessageListResponse,
     MessageMarkResponse,
     MessageResponse,
+    MessageSendResponse,
+    MessageUnreadCountResponse,
 )
 from src.messaging.service import MessageService
 from src.profiles.service import ProfileService
@@ -22,7 +29,9 @@ message_service = MessageService()
 profile_service = ProfileService()
 
 
-@router.get("/", response_model=List[MessageListResponse])
+@router.get(
+    "/", responses=GET_USER_MESSAGES_RESPONSES, response_model=MessageListResponse
+)
 async def get_my_messages(
     unread_only: bool = Query(False, description="Show only unread messages"),
     limit: int = Query(50, ge=1, le=100, description="Number of messages"),
@@ -61,10 +70,12 @@ async def get_my_messages(
     }
 
 
-@router.post("/", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/", response_model=MessageSendResponse, status_code=status.HTTP_201_CREATED
+)
 async def send_message(
     message_data: MessageCreate,
-    recipient_username: str = Query(..., description="Username of message recipient"),
+    recipient_username: str = Query(description="Username of message recipient"),
     session: AsyncSession = Depends(get_session),
 ):
     """
@@ -88,7 +99,7 @@ async def send_message(
     if not recipient_profile:
         raise NotFound(f"User '{recipient_username}' not found")
 
-    new_message = await message_service.create_message(
+    await message_service.create_message(
         recipient_profile_id=str(recipient_profile.id),
         message_data=message_data.model_dump(),
         session=session,
@@ -97,11 +108,12 @@ async def send_message(
     return {
         "status": SUCCESS_EXAMPLE,
         "message": "Messages sent successfully",
-        "data": new_message,
     }
 
 
-@router.get("/{message_id}", response_model=MessageResponse)
+@router.get(
+    "/{message_id}", responses=GET_MESSAGE_RESPONSES, response_model=MessageResponse
+)
 async def get_message(
     message_id: str,
     current_user: User = Depends(get_current_user),
@@ -110,7 +122,6 @@ async def get_message(
     """
     Get a specific message by ID
     """
-
     message = await message_service.get_message_by_id(message_id, session)
 
     if not message:
@@ -120,11 +131,8 @@ async def get_message(
         str(current_user.id), session
     )
 
-    if not profile:
-        raise NotFound("Profile not found")
-
     if str(message.recipient_id) != str(profile.id):
-        raise PermissionError("You can only read your own messages")
+        raise InsufficientPermission("You can only read your own messages")
 
     if not message.is_read:
         message = await message_service.mark_as_read(message, session)
@@ -136,50 +144,11 @@ async def get_message(
     }
 
 
-@router.put("/{message_id}", response_model=MessageMarkResponse)
-async def mark_message_as_read(
-    message_id: str,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    """
-    Mark a message as read
-
-    USE CASE:
-    User wants to mark message as read without opening it
-
-    NOTE:
-    GET /messages/{id} automatically marks as read,
-    so this is mainly for UI interactions
-    """
-
-    message = await message_service.get_message_by_id(message_id, session)
-
-    if not message:
-        raise NotFound("Message not found")
-
-    # Get user's profile
-    profile = await profile_service.get_profile_by_user_id(
-        str(current_user.id), session
-    )
-
-    if not profile:
-        raise NotFound("Profile not found")
-
-    if str(message.recipient_id) != str(profile.id):
-        raise PermissionError("You can only mark your own messages as read")
-
-    if not message.is_read:
-        message = await message_service.mark_as_read(message, session)
-
-    return {
-        "status": SUCCESS_EXAMPLE,
-        "message": "Message marked as read",
-        "is_read": message.is_read,
-    }
-
-
-@router.put("/{message_id}", response_model=MessageMarkResponse)
+@router.patch(
+    "/{message_id}",
+    responses=MARK_MESSAGE_RESPONSES,
+    response_model=MessageMarkResponse,
+)
 async def mark_message_as_unread(
     message_id: str,
     current_user: User = Depends(get_current_user),
@@ -187,9 +156,6 @@ async def mark_message_as_unread(
 ):
     """
     Mark a message as unread
-
-    USE CASE:
-    User wants to mark message as unread after opening it
     """
 
     message = await message_service.get_message_by_id(message_id, session)
@@ -197,16 +163,13 @@ async def mark_message_as_unread(
     if not message:
         raise NotFound("Message not found")
 
-    # Get user's profile
+    # Get user's profile - exists if user exists
     profile = await profile_service.get_profile_by_user_id(
         str(current_user.id), session
     )
 
-    if not profile:
-        raise NotFound("Profile not found")
-
     if str(message.recipient_id) != str(profile.id):
-        raise PermissionError("You can only mark your own messages as unread")
+        raise InsufficientPermission("You can only mark your own messages as unread")
 
     if not message.is_read:
         message = await message_service.mark_as_unread(message, session)
@@ -218,7 +181,11 @@ async def mark_message_as_unread(
     }
 
 
-@router.get("/unread/count")
+@router.get(
+    "/unread/count",
+    responses=GET_UNREAD_COUNT_RESPONSES,
+    response_model=MessageUnreadCountResponse,
+)
 async def get_unread_count(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
@@ -230,9 +197,6 @@ async def get_unread_count(
         str(current_user.id), session
     )
 
-    if not profile:
-        raise NotFound("Profile not found")
-
     count = await message_service.get_unread_count(str(profile.id), session)
 
     return {
@@ -242,7 +206,9 @@ async def get_unread_count(
     }
 
 
-@router.delete("/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{message_id}", responses=DELETE_RESPONSES, status_code=status.HTTP_204_NO_CONTENT
+)
 async def delete_message(
     message_id: str,
     current_user: User = Depends(get_current_user),
@@ -260,11 +226,8 @@ async def delete_message(
         str(current_user.id), session
     )
 
-    if not profile:
-        raise NotFound("Profile not found")
-
     if str(message.recipient_id) != str(profile.id):
-        raise PermissionError("You can only delete your own messages")
+        raise InsufficientPermission("You can only delete your own messages")
 
     await message_service.delete_message(message, session)
 

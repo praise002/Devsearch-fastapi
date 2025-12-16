@@ -65,21 +65,6 @@ class MessageService:
         await session.refresh(new_message)
         return new_message
 
-    async def mark_as_read(self, message: Message, session: AsyncSession) -> Message:
-        """
-        Mark a message as read
-
-        WHY?
-        - Track which messages user has seen
-        - Show unread count in UI
-        - Different styling for read/unread
-        """
-        message.is_read = True
-        session.add(message)
-        await session.commit()
-        await session.refresh(message)
-        return message
-    
     async def mark_as_unread(self, message: Message, session: AsyncSession) -> Message:
         """
         Mark a message as unread
