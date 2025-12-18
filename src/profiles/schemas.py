@@ -46,13 +46,17 @@ class ProfileUpdate(BaseModel):
     website: str = Field(default=None, max_length=200)
 
 
-class SkillResponse(BaseModel):
+class SkillDataResponse(BaseModel):
     id: str
     name: str
     description: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
+class SkillResponse(BaseModel):
+    status: str
+    message: str
+    data: SkillDataResponse
 
 class ProfileData(BaseModel):
     # User fields
@@ -99,7 +103,7 @@ class ProfileListData(BaseModel):
 class ProfileListResponse(BaseModel):
     status: str
     message: str
-    data: ProfileListData
+    data: list[ProfileListData]
 
 
 class AvatarUploadResponse(BaseModel):

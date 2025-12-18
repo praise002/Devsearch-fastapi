@@ -12,9 +12,14 @@ from src.db.main import get_session
 from src.db.models import Profile, ProfileSkill, User
 from src.errors import InsufficientPermission, NotFound, UnprocessableEntity
 from src.profiles.schema_examples import (
+    ADD_SKILL_RESPONSES,
+    DELETE_SKILL_RESPONSES,
     GET_USER_PROFILE_EXAMPLE,
     GET_USER_PROFILE_RESPONSES,
+    GET_USER_SKILLS_RESPONSES,
     UPDATE_PROFILE_RESPONSES,
+    UPDATE_SKILL_RESPONSES,
+    UPLOAD_AVATAR_RESPONSES,
 )
 from src.profiles.schemas import (
     AvatarUploadResponse,
@@ -36,7 +41,7 @@ profile_service = ProfileService()
 cloudinary_service = CloudinaryService()
 
 
-@router.get("/", response_model=List[ProfileListResponse])
+@router.get("/", response_model=ProfileListResponse)
 async def get_profiles(
     search: str = Query(None, description="Search by username, intro, or location"),
     limit: int = Query(20, ge=1, le=100, description="Number of profiles to return"),
@@ -177,6 +182,7 @@ async def update_my_profile(
 
 @router.post(
     "/avatar",
+    responses=UPLOAD_AVATAR_RESPONSES,
     response_model=AvatarUploadResponse,
 )
 async def upload_avatar(
@@ -274,6 +280,7 @@ async def get_user_profile(
 
 @router.patch(
     "/{username}",
+    responses=UPLOAD_AVATAR_RESPONSES,
     response_model=ProfileResponse,
 )
 async def update_user_profile(
@@ -305,6 +312,7 @@ async def update_user_profile(
 
 @router.post(
     "/{username}/skills",
+    responses=ADD_SKILL_RESPONSES,
     response_model=SkillResponse,
     status_code=status.HTTP_201_CREATED,
 )
@@ -353,7 +361,9 @@ async def add_skill_to_profile(
     )
 
 
-@router.get("/{username}/skills", response_model=List[SkillResponse])
+@router.get("/{username}/skills", 
+            responses=GET_USER_SKILLS_RESPONSES,
+            response_model=List[SkillResponse])
 async def get_user_skills(
     username: str,
     session: AsyncSession = Depends(get_session),
@@ -386,7 +396,9 @@ async def get_user_skills(
     ]
 
 
-@router.patch("/{username}/skills/{skill_id}", response_model=SkillResponse)
+@router.patch("/{username}/skills/{skill_id}", 
+              responses=UPDATE_SKILL_RESPONSES,
+              response_model=SkillResponse)
 async def update_skill(
     username: str,
     skill_id: str,
@@ -432,7 +444,9 @@ async def update_skill(
     )
 
 
-@router.delete("/{username}/skills/{skill_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{username}/skills/{skill_id}", 
+               responses=DELETE_SKILL_RESPONSES,
+               status_code=status.HTTP_204_NO_CONTENT)
 async def delete_skill(
     username: str,
     skill_id: str,
@@ -470,4 +484,4 @@ async def delete_skill(
     return None
 
 
-# NOTE: CAN RETURN 204 AND FRONTEND SHOULD BE ABLE TO DISPLAY DEFAULT URL
+# TODO: SECURITY CHECK FOR THE RESPONSES

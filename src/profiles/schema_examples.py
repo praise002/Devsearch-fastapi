@@ -1,3 +1,4 @@
+from src.auth.schema_examples import UNAUTHORIZED, VALIDATION_ERROR
 from src.auth.utils import EMAIL_EXAMPLE, FAILURE_EXAMPLE, SUCCESS_EXAMPLE, UUID_EXAMPLE
 
 PROFILE_RES_EX = {
@@ -41,17 +42,7 @@ GET_USER_PROFILE_RESPONSES = {
             }
         }
     },
-    401: {
-        "content": {
-            "application/json": {
-                "example": {
-                    "status": FAILURE_EXAMPLE,
-                    "message": "Please provide a valid access token.",
-                    "err_code": "access_token_required",
-                }
-            }
-        }
-    },
+    401: UNAUTHORIZED,
     404: {
         "content": {
             "application/json": {
@@ -104,18 +95,8 @@ UPDATE_PROFILE_RESPONSES = {
 }
 
 UPDATE_PROFILE_RESPONSES = {
-    # 204 automatically displays
-    401: {
-        "content": {
-            "application/json": {
-                "example": {
-                    "status": FAILURE_EXAMPLE,
-                    "message": "Please provide a valid access token.",
-                    "err_code": "access_token_required",
-                }
-            }
-        }
-    },
+    # 422 by default
+    401: UNAUTHORIZED,
     404: {
         "content": {
             "application/json": {
@@ -148,6 +129,143 @@ GET_USER_PROFILE_EXAMPLE = {
                     "status": FAILURE_EXAMPLE,
                     "message": "Profile for user '<username>' not found",
                     "err_code": "not_found",
+                }
+            }
+        }
+    },
+}
+
+UPLOAD_AVATAR_RESPONSES = {
+    # 200 and 422 by default
+    401: UNAUTHORIZED,
+}
+
+
+ADD_SKILL_RESPONSES = {
+    401: UNAUTHORIZED,
+    403: {
+        "content": {
+            "application/json": {
+                "example": {
+                    "status": FAILURE_EXAMPLE,
+                    "message": "You can only add skills to your own profile",
+                    "err_code": "insufficient_permission",
+                }
+            }
+        }
+    },
+    404: {
+        "content": {
+            "application/json": {
+                "example": {
+                    "status": FAILURE_EXAMPLE,
+                    "message": "Profile for user '<username>' not found",
+                    "err_code": "not_found",
+                }
+            }
+        }
+    },
+    422: {
+        "content": {
+            "application/json": {
+                "examples": {
+                    "skill_exists": {
+                        "status": FAILURE_EXAMPLE,
+                        "message": "Skill 'Python' already exists in your profile",
+                        "err_code": "unprocessable_entity",
+                    },
+                    "validation_error": VALIDATION_ERROR,
+                }
+            }
+        }
+    },
+}
+
+GET_USER_SKILLS_RESPONSES = {
+    # 200 anddd 422 by default
+    404: {
+        "content": {
+            "application/json": {
+                "example": {
+                    "status": FAILURE_EXAMPLE,
+                    "message": "Profile for user '<username>' not found",
+                    "err_code": "not_found",
+                }
+            }
+        }
+    },
+}
+
+
+UPDATE_SKILL_RESPONSES = {
+    401: UNAUTHORIZED,
+    403: {
+        "content": {
+            "application/json": {
+                "example": {
+                    "status": FAILURE_EXAMPLE,
+                    "message": "You can only update your own skills",
+                    "err_code": "insufficient_permission",
+                }
+            }
+        }
+    },
+    404: {
+        "content": {
+            "application/json": {
+                "examples": {
+                    "profile_not_found": {
+                        "value": {
+                            "status": FAILURE_EXAMPLE,
+                            "message": "Profile for user '<username>' not found",
+                            "err_code": "not_found",
+                        }
+                    },
+                    "skill_not_found": {
+                        "value": {
+                            "status": FAILURE_EXAMPLE,
+                            "message": "Skill not found in profile",
+                            "err_code": "not_found",
+                        }
+                    },
+                }
+            }
+        }
+    },
+}
+
+
+DELETE_SKILL_RESPONSES = {
+    401: UNAUTHORIZED,
+    403: {
+        "content": {
+            "application/json": {
+                "example": {
+                    "status": FAILURE_EXAMPLE,
+                    "message": "You can only delete your own skills",
+                    "err_code": "insufficient_permission",
+                }
+            }
+        }
+    },
+    404: {
+        "content": {
+            "application/json": {
+                "examples": {
+                    "profile_not_found": {
+                        "value": {
+                            "status": FAILURE_EXAMPLE,
+                            "message": "Profile for user '<username>' not found",
+                            "err_code": "not_found",
+                        }
+                    },
+                    "skill_not_found": {
+                        "value": {
+                            "status": FAILURE_EXAMPLE,
+                            "message": "Skill not found in profile",
+                            "err_code": "not_found",
+                        }
+                    },
                 }
             }
         }

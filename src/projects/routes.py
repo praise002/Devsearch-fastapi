@@ -29,7 +29,6 @@ from src.projects.schemas import (
     ProjectUpdate,
     ReviewCreate,
     ReviewResponse,
-    TagCreate,
     TagListResponse,
     TagResponse,
 )
