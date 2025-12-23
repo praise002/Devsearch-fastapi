@@ -1,11 +1,12 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 from decouple import config
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.auth.background_tasks import upload_profile_picture_task
 from src.auth.dependencies import RefreshTokenBearer, RoleChecker, get_current_user
 from src.auth.oauth_config import oauth
 from src.auth.schema_examples import (
@@ -43,7 +44,6 @@ from src.config import Config
 from src.db.main import get_session
 from src.db.redis import add_jti_to_blocklist
 from src.errors import (
-    AccountNotVerified,
     GoogleAuthenticationFailed,
     InvalidOldPassword,
     InvalidOtp,
@@ -319,19 +319,9 @@ async def password_reset_request(
             extra={
                 "event_type": "password_reset_invalid_email",
                 "email": email,
-                "client_ip": request.client.host,
                 "user_agent": request.headers.get("user-agent"),
-                "timestamp": datetime.now(timezone.utc),
             },
         )
-        # logging.warning(
-        #     f"Password reset attempt on invalid/inactive account | "
-        #     f"event_type=password_reset_invalid_email | "
-        #     f"email={email} | "
-        #     f"client_ip={request.client.host} | "
-        #     f"user_agent={request.headers.get('user-agent')} | "
-        #     f"timestamp={datetime.now(timezone.utc)}"
-        # )
         return {
             "status": "success",
             "message": "If that email address is in our database, we will send you an email to reset your password",
@@ -489,7 +479,7 @@ async def google_auth(request: Request):
     return await oauth.google.authorize_redirect(request, redirect_url)
 
 
-@router.get("/google/callback", status_code=status.HTTP_200_OK, include_in_schema=False)
+@router.get("/google/callback", include_in_schema=False)
 async def google_auth_callback(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -520,8 +510,7 @@ async def google_auth_callback(
         else:
             first_name = user_info.get("given_name")
             last_name = user_info.get("family_name")
-            # download and upload image to cloudinary
-            # picture = user_info.get("picture") TODO: LATER
+            picture_url = user_info.get("picture") 
             auth_provider = user_info.get("iss")
             print(auth_provider)
             google_id = user_info.get("sub")
@@ -546,6 +535,23 @@ async def google_auth_callback(
                 new_user.first_name,
             )
 
+            # Upload profile picture in background
+            if picture_url:
+                background_tasks.add_task(
+                    upload_profile_picture_task,
+                    user_id=str(new_user.id),
+                    image_url=picture_url,
+                )
+                
+                logging.info(
+                    "Profile picture upload task queued for new user",
+                    extra={
+                        "event_type": "profile_picture_task_queued",
+                        "user_id": str(new_user.id),
+                        "email": email
+                    }
+                )
+
             return response
 
     except Exception as e:
@@ -553,4 +559,4 @@ async def google_auth_callback(
         raise GoogleAuthenticationFailed()
 
 
-# TODO: MIGHT NEED TO REMOVE 200 OK
+

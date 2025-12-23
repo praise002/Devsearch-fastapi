@@ -218,6 +218,8 @@ src/
 - [Resolved issue with 403 for unauthenticated users](https://github.com/fastapi/fastapi/issues/2026)
 - [Fastapi JWT Auth](https://indominusbyte.github.io/fastapi-jwt-auth/usage/revoking/)
 - [Implementing Google OAuth2 in Fastapi](https://dev.to/ayoub3bidi/quick-tutorial-implementing-google-oauth2-in-fastapi-callback-method-ba4)
+- [Logging requests and responses](https://dev.to/rajathkumarks/creating-a-middleware-in-fastapi-for-logging-request-and-responses-379o)
+- [Logging with FastAPI](https://betterstack.com/community/guides/logging/logging-with-fastapi/)
 
 ## 🤝 Contributing
 

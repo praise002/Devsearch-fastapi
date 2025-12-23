@@ -1,13 +1,13 @@
 import json
 import logging
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class JSONFormatter(logging.Formatter):
     def format(self, record):
         log_data = {
-            "timestamp": datetime.fromtimestamp(record.created).isoformat(),
+            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -45,6 +45,7 @@ class JSONFormatter(logging.Formatter):
                     value = value.isoformat()
                 log_data[key] = value
 
+        # Add exception info if available
         if record.exc_info:
             log_data["exception"] = self.formatException(record.exc_info)
 
@@ -59,7 +60,6 @@ def setup_logging():
     logging.root.addHandler(handler)
     logging.root.setLevel(logging.INFO)
 
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+    # logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    # logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
-# TODO: GO THROUGH THIS AGAIN AND SEARCH FOR RESOURCES THAT EXPLAINS SIMPLER WAYS TO DOING IT

@@ -10,18 +10,10 @@ from starlette.middleware.sessions import SessionMiddleware
 
 def register_middleware(app: FastAPI):
     @app.middleware("http")
-    async def add_process_time_header(request: Request, call_next):
-        start_time = time.perf_counter()
-        response = await call_next(request)
-        process_time = time.perf_counter() - start_time
-        response.headers["X-Process-Time"] = str(process_time)
-        return response
-    
-    @app.middleware("http")
     async def log_requests(request: Request, call_next):
         """Log each HTTP request/response"""
-        start_time = time.time()
-        
+        start_time = time.perf_counter()
+
         logging.info(
             "Incoming request",
             extra={
@@ -29,13 +21,13 @@ def register_middleware(app: FastAPI):
                 "method": request.method,
                 "path": request.url.path,
                 "client_ip": request.client.host,
-            }
+            },
         )
-        
+
         response = await call_next(request)
-        
-        duration = time.time() - start_time
-        
+
+        duration = time.perf_counter() - start_time
+
         logging.info(
             "Request completed",
             extra={
@@ -44,9 +36,9 @@ def register_middleware(app: FastAPI):
                 "path": request.url.path,
                 "status_code": response.status_code,
                 "duration_ms": round(duration * 1000, 2),
-            }
+            },
         )
-        
+
         return response
 
     app.add_middleware(

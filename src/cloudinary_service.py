@@ -95,6 +95,63 @@ class CloudinaryService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to upload image: {str(e)}",
             )
+            
+    @staticmethod
+    async def upload_image_from_url(
+        image_url: str,
+        folder: str = "avatars",
+        public_id: Optional[str] = None,
+        overwrite: bool = True,
+    ) -> Optional[str]:
+        """
+        Upload image from URL directly to Cloudinary
+        
+        Args:
+            image_url: URL of the image to upload
+            folder: Cloudinary folder
+            public_id: Optional custom public ID
+            overwrite: Whether to overwrite existing
+            
+        Returns:
+            str: Secure URL of uploaded image, or None if failed
+        """
+        try:
+            upload_options = {
+                "folder": folder,
+                "tags": [CloudinaryService.MEDIA_TAG],
+                "overwrite": overwrite,
+                "resource_type": "image",
+                "format": "jpg",
+                "transformation": [
+                    {
+                        "width": 500,
+                        "height": 500,
+                        "crop": "fill",
+                        "gravity": "face",
+                    },
+                    {"quality": "auto:good"},
+                ],
+            }
+
+            if public_id:
+                upload_options["public_id"] = public_id
+
+            # Cloudinary can download from URL directly!
+            result = cloudinary.uploader.upload(image_url, **upload_options)
+
+            return result["secure_url"]
+
+        except Exception as e:
+            # Don't raise - just log and return None (background task)
+            import logging
+            logging.error(
+                "Failed to upload profile picture from URL",
+                extra={
+                    "image_url": image_url,
+                    "error": str(e)
+                }
+            )
+            return None
 
     @staticmethod
     async def delete_image(public_id: str) -> bool:
