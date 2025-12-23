@@ -43,13 +43,13 @@ GET_USER_PROFILE_RESPONSES = {
         }
     },
     401: UNAUTHORIZED,
-    404: {
+    403: {
         "content": {
             "application/json": {
                 "example": {
                     "status": FAILURE_EXAMPLE,
-                    "message": "Profile not found",
-                    "err_code": "not_found",
+                    "message": "Your account has been disabled. Please contact support for assistance",
+                    "err_code": "insufficient_permission",
                 }
             }
         }
@@ -58,6 +58,7 @@ GET_USER_PROFILE_RESPONSES = {
 
 
 UPDATE_PROFILE_RESPONSES = {
+    # 422 by default
     200: {
         "content": {
             "application/json": {
@@ -69,48 +70,38 @@ UPDATE_PROFILE_RESPONSES = {
             }
         }
     },
-    401: {
-        "content": {
-            "application/json": {
-                "example": {
-                    "status": FAILURE_EXAMPLE,
-                    "message": "Please provide a valid access token.",
-                    "err_code": "access_token_required",
-                }
-            }
-        }
-    },
-    404: {
-        "content": {
-            "application/json": {
-                "example": {
-                    "status": FAILURE_EXAMPLE,
-                    "message": "Profile not found",
-                    "err_code": "not_found",
-                }
-            }
-        }
-    },
-    # 422 automatically displays in the docs
-}
-
-UPDATE_PROFILE_RESPONSES = {
-    # 422 by default
     401: UNAUTHORIZED,
-    404: {
+    403: {
         "content": {
             "application/json": {
                 "example": {
                     "status": FAILURE_EXAMPLE,
-                    "message": "Profile not found",
-                    "err_code": "not_found",
+                    "message": "Your account has been disabled. Please contact support for assistance",
+                    "err_code": "insufficient_permission",
                 }
             }
         }
     },
 }
 
-GET_USER_PROFILE_EXAMPLE = {
+DELETE_AVATAR_RESPONSES = {
+    # 204 by default
+    401: UNAUTHORIZED,
+    403: {
+        "content": {
+            "application/json": {
+                "example": {
+                    "status": FAILURE_EXAMPLE,
+                    "message": "Your account has been disabled. Please contact support for assistance",
+                    "err_code": "insufficient_permission",
+                }
+            }
+        }
+    },
+}
+
+
+GET_USER_PROFILE_RESPONSES = {
     200: {
         "content": {
             "application/json": {
@@ -135,9 +126,47 @@ GET_USER_PROFILE_EXAMPLE = {
     },
 }
 
+UPDATE_USER_PROFILE_RESPONSES = {
+    # 422 by default
+    200: {
+        "content": {
+            "application/json": {
+                "example": {
+                    "status": SUCCESS_EXAMPLE,
+                    "message": "Profile retrieved successfully",
+                    "data": PROFILE_RES_EX,
+                }
+            }
+        }
+    },
+    401: UNAUTHORIZED,
+    403: {
+        "content": {
+            "application/json": {
+                "example": {
+                    "status": FAILURE_EXAMPLE,
+                    "message": "Your account has been disabled. Please contact support for assistance",
+                    "err_code": "insufficient_permission",
+                }
+            }
+        }
+    },
+}
+
 UPLOAD_AVATAR_RESPONSES = {
     # 200 and 422 by default
     401: UNAUTHORIZED,
+    403: {
+        "content": {
+            "application/json": {
+                "example": {
+                    "status": FAILURE_EXAMPLE,
+                    "message": "Your account has been disabled. Please contact support for assistance",
+                    "err_code": "insufficient_permission",
+                }
+            }
+        }
+    },
 }
 
 
@@ -148,19 +177,8 @@ ADD_SKILL_RESPONSES = {
             "application/json": {
                 "example": {
                     "status": FAILURE_EXAMPLE,
-                    "message": "You can only add skills to your own profile",
+                    "message": "Your account has been disabled. Please contact support for assistance",
                     "err_code": "insufficient_permission",
-                }
-            }
-        }
-    },
-    404: {
-        "content": {
-            "application/json": {
-                "example": {
-                    "status": FAILURE_EXAMPLE,
-                    "message": "Profile for user '<username>' not found",
-                    "err_code": "not_found",
                 }
             }
         }
@@ -170,9 +188,11 @@ ADD_SKILL_RESPONSES = {
             "application/json": {
                 "examples": {
                     "skill_exists": {
-                        "status": FAILURE_EXAMPLE,
-                        "message": "Skill 'Python' already exists in your profile",
-                        "err_code": "unprocessable_entity",
+                        "value": {
+                            "status": FAILURE_EXAMPLE,
+                            "message": "Skill 'Python' already exists in your profile",
+                            "err_code": "unprocessable_entity",
+                        }
                     },
                     "validation_error": VALIDATION_ERROR,
                 }
@@ -204,7 +224,7 @@ UPDATE_SKILL_RESPONSES = {
             "application/json": {
                 "example": {
                     "status": FAILURE_EXAMPLE,
-                    "message": "You can only update your own skills",
+                    "message": "Your account has been disabled. Please contact support for assistance",
                     "err_code": "insufficient_permission",
                 }
             }
@@ -213,21 +233,12 @@ UPDATE_SKILL_RESPONSES = {
     404: {
         "content": {
             "application/json": {
-                "examples": {
-                    "profile_not_found": {
-                        "value": {
-                            "status": FAILURE_EXAMPLE,
-                            "message": "Profile for user '<username>' not found",
-                            "err_code": "not_found",
-                        }
-                    },
-                    "skill_not_found": {
-                        "value": {
-                            "status": FAILURE_EXAMPLE,
-                            "message": "Skill not found in profile",
-                            "err_code": "not_found",
-                        }
-                    },
+                "example": {
+                    "value": {
+                        "status": FAILURE_EXAMPLE,
+                        "message": "Skill not found in profile",
+                        "err_code": "not_found",
+                    }
                 }
             }
         }
@@ -236,13 +247,14 @@ UPDATE_SKILL_RESPONSES = {
 
 
 DELETE_SKILL_RESPONSES = {
+    # 204 by default
     401: UNAUTHORIZED,
     403: {
         "content": {
             "application/json": {
                 "example": {
                     "status": FAILURE_EXAMPLE,
-                    "message": "You can only delete your own skills",
+                    "message": "Your account has been disabled. Please contact support for assistance",
                     "err_code": "insufficient_permission",
                 }
             }
@@ -251,21 +263,12 @@ DELETE_SKILL_RESPONSES = {
     404: {
         "content": {
             "application/json": {
-                "examples": {
-                    "profile_not_found": {
-                        "value": {
-                            "status": FAILURE_EXAMPLE,
-                            "message": "Profile for user '<username>' not found",
-                            "err_code": "not_found",
-                        }
-                    },
-                    "skill_not_found": {
-                        "value": {
-                            "status": FAILURE_EXAMPLE,
-                            "message": "Skill not found in profile",
-                            "err_code": "not_found",
-                        }
-                    },
+                "example": {
+                    "value": {
+                        "status": FAILURE_EXAMPLE,
+                        "message": "Skill not found in profile",
+                        "err_code": "not_found",
+                    }
                 }
             }
         }

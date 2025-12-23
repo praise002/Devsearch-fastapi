@@ -57,6 +57,11 @@ class SkillResponse(BaseModel):
     status: str
     message: str
     data: SkillDataResponse
+    
+class SkillListResponse(BaseModel):
+    status: str
+    message: str
+    data: list[SkillDataResponse]
 
 class ProfileData(BaseModel):
     # User fields

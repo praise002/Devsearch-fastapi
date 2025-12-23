@@ -7,7 +7,7 @@ CREATE_PROJECT_RESPONSES = {
     403: {
         "content": {
             "application/json": {
-                "examples": {
+                "example": {
                     "status": FAILURE_EXAMPLE,
                     "message": "Your account has been disabled. Please contact support for assistance",
                     "err_code": "insufficient_permission",
@@ -287,7 +287,7 @@ GET_ALL_TAGS_RESPONSES = {
     403: {
         "content": {
             "application/json": {
-                "examples": {
+                "example": {
                     "status": FAILURE_EXAMPLE,
                     "message": "Your account has been disabled. Please contact support for assistance",
                     "err_code": "insufficient_permission",
