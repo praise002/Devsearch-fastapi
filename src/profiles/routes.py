@@ -1,5 +1,3 @@
-from typing import List
-
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
@@ -10,7 +8,7 @@ from src.auth.utils import SUCCESS_EXAMPLE
 from src.cloudinary_service import CloudinaryService
 from src.db.main import get_session
 from src.db.models import Profile, ProfileSkill, User
-from src.errors import InsufficientPermission, NotFound, UnprocessableEntity
+from src.errors import NotFound, UnprocessableEntity
 from src.profiles.schema_examples import (
     ADD_SKILL_RESPONSES,
     DELETE_AVATAR_RESPONSES,
@@ -91,7 +89,6 @@ async def get_profiles(
 )
 async def get_my_profile(
     current_user=Depends(get_current_user),
-    # _: bool = Depends(role_checker),
     session: AsyncSession = Depends(get_session),
 ):
     """Get current user's profile"""

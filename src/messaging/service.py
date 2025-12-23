@@ -3,7 +3,7 @@ from typing import List, Optional
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.db.models import Message, Profile, User
+from src.db.models import Message
 
 
 class MessageService:

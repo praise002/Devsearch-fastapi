@@ -7,6 +7,7 @@ from starlette.templating import Jinja2Templates
 from starlette_admin.contrib.sqla import Admin, ModelView
 
 from src.auth.routes import router as auth_router
+from src.custom_logging import setup_logging
 from src.profiles.routes import router as profile_router
 from src.projects.routes import router as project_router
 from src.messaging.routes import router as message_router
@@ -32,6 +33,8 @@ The API is built using modern best practices and RESTful principles, ensuring th
 """
 
 version = "v1"
+
+setup_logging()
 
 app = FastAPI(
     title="DevSearch",

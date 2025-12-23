@@ -81,10 +81,13 @@ async def get_current_user(
     user_email = token_details["user"]["email"]
 
     user = await user_service.get_user_by_email(user_email, session)
-    
+
     if not user.is_active:
         raise UserNotActive()
-    
+
+    if not user.is_email_verified:
+        raise AccountNotVerified()
+
     return user
 
 
@@ -93,8 +96,6 @@ class RoleChecker:
         self.allowed_roles = allowed_roles
 
     def __call__(self, current_user: User = Depends(get_current_user)):
-        if not current_user.is_email_verified:
-            raise AccountNotVerified()
         if current_user.role in self.allowed_roles:
             return True
 

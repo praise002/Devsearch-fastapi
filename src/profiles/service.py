@@ -64,7 +64,7 @@ class ProfileService:
         """Update profile with new data"""
         for key, value in update_data.items():
             # if value is not None:
-                setattr(profile, key, value)
+            setattr(profile, key, value)
 
         session.add(profile)
         await session.commit()
@@ -181,13 +181,3 @@ class ProfileService:
         """Remove a skill from profile"""
         await session.delete(profile_skill)
         await session.commit()
-
-
-# TODO: FULL-TEXT SEARCH WITH POSTGRES
-# 5) Full-text search (Postgres) - better performance for larger text fields
-# from sqlalchemy import func
-# ts_vector = func.to_tsvector('english', Profile.short_intro + ' ' + Profile.location + ' ' + User.username)
-# stmt = select(Profile).join(User).where(ts_vector.match(search)).offset(offset).limit(limit)
-# res = await session.exec(stmt)
-# return res.all()
-# NOTE: requires Postgres and proper indexes (GIN on to_tsvector).

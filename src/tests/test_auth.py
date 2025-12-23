@@ -1152,10 +1152,7 @@ class TestPasswordResetRequest:
     reset_url = "/api/v1/auth/passwords/reset"
 
     async def test_password_reset_request_success(
-        self,
-        async_client: AsyncClient,
-        verified_user: User,
-        mock_email: list,
+        self, async_client: AsyncClient, verified_user: User, mock_email: list
     ):
         reset_data = {"email": verified_user.email}
         response = await async_client.post(self.reset_url, json=reset_data)

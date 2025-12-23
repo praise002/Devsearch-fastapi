@@ -276,7 +276,7 @@ class Project(SQLModel, table=True):
     id: uuid.UUID = Field(primary_key=True, default_factory=uuid.uuid4)
     title: str = Field(index=True, max_length=255)
 
-    slug: str = Field(sa_column=Column(unique=True), default_factory=lambda self: slugify(self.title))
+    slug: str = Field(unique=True, index=True)
     owner: Profile | None = Relationship(back_populates="projects")
     owner_id: uuid.UUID | None = Field(
         default=None, foreign_key="profile.id", ondelete="CASCADE"

@@ -1,3 +1,4 @@
+import logging
 import time
 
 from decouple import config
@@ -14,6 +15,38 @@ def register_middleware(app: FastAPI):
         response = await call_next(request)
         process_time = time.perf_counter() - start_time
         response.headers["X-Process-Time"] = str(process_time)
+        return response
+    
+    @app.middleware("http")
+    async def log_requests(request: Request, call_next):
+        """Log each HTTP request/response"""
+        start_time = time.time()
+        
+        logging.info(
+            "Incoming request",
+            extra={
+                "event_type": "http_request",
+                "method": request.method,
+                "path": request.url.path,
+                "client_ip": request.client.host,
+            }
+        )
+        
+        response = await call_next(request)
+        
+        duration = time.time() - start_time
+        
+        logging.info(
+            "Request completed",
+            extra={
+                "event_type": "http_response",
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "duration_ms": round(duration * 1000, 2),
+            }
+        )
+        
         return response
 
     app.add_middleware(

@@ -7,10 +7,21 @@ CREATE_PROJECT_RESPONSES = {
     403: {
         "content": {
             "application/json": {
-                "example": {
-                    "status": FAILURE_EXAMPLE,
-                    "message": "Your account has been disabled. Please contact support for assistance",
-                    "err_code": "insufficient_permission",
+                "examples": {
+                    "account_disabled": {
+                        "value": {
+                            "status": FAILURE_EXAMPLE,
+                            "message": "Your account has been disabled. Please contact support for assistance",
+                            "err_code": "insufficient_permission",
+                        }
+                    },
+                    "account_not_verified": {
+                        "value": {
+                            "status": FAILURE_EXAMPLE,
+                            "message": "Account not verified.",
+                            "err_code": "account_not_verified",
+                        }
+                    },
                 }
             }
         }
@@ -30,6 +41,13 @@ UPDATE_PROJECT_RESPONSES = {
                             "message": "Your account has been disabled. Please contact support for assistance",
                             "err_code": "insufficient_permission",
                         },
+                    },
+                    "account_not_verified": {
+                        "value": {
+                            "status": FAILURE_EXAMPLE,
+                            "message": "Account not verified.",
+                            "err_code": "account_not_verified",
+                        }
                     },
                     "permission_denied": {
                         "value": {
@@ -72,6 +90,13 @@ DELETE_PROJECT_RESPONSES = {
                             "err_code": "insufficient_permission",
                         },
                     },
+                    "account_not_verified": {
+                        "value": {
+                            "status": FAILURE_EXAMPLE,
+                            "message": "Account not verified.",
+                            "err_code": "account_not_verified",
+                        }
+                    },
                     "permission_denied": {
                         "value": {
                             "status": FAILURE_EXAMPLE,
@@ -111,6 +136,13 @@ CREATE_REVIEW_RESPONSES = {
                             "message": "Your account has been disabled. Please contact support for assistance",
                             "err_code": "insufficient_permission",
                         },
+                    },
+                    "account_not_verified": {
+                        "value": {
+                            "status": FAILURE_EXAMPLE,
+                            "message": "Account not verified.",
+                            "err_code": "account_not_verified",
+                        }
                     },
                     "permission_denied": {
                         "value": {
@@ -185,6 +217,13 @@ ADD_TAGS_PROJECT_RESPONSES = {
                             "err_code": "insufficient_permission",
                         },
                     },
+                    "account_not_verified": {
+                        "value": {
+                            "status": FAILURE_EXAMPLE,
+                            "message": "Account not verified.",
+                            "err_code": "account_not_verified",
+                        }
+                    },
                     "permission_denied": {
                         "value": {
                             "status": FAILURE_EXAMPLE,
@@ -241,6 +280,13 @@ REMOVE_TAGS_PROJECT_RESPONSES = {
                             "err_code": "insufficient_permission",
                         },
                     },
+                    "account_not_verified": {
+                        "value": {
+                            "status": FAILURE_EXAMPLE,
+                            "message": "Account not verified.",
+                            "err_code": "account_not_verified",
+                        }
+                    },
                     "permission_denied": {
                         "value": {
                             "status": FAILURE_EXAMPLE,
@@ -287,10 +333,21 @@ GET_ALL_TAGS_RESPONSES = {
     403: {
         "content": {
             "application/json": {
-                "example": {
-                    "status": FAILURE_EXAMPLE,
-                    "message": "Your account has been disabled. Please contact support for assistance",
-                    "err_code": "insufficient_permission",
+                "examples": {
+                    "account_disabled": {
+                        "value": {
+                            "status": FAILURE_EXAMPLE,
+                            "message": "Your account has been disabled. Please contact support for assistance",
+                            "err_code": "insufficient_permission",
+                        }
+                    },
+                    "account_not_verified": {
+                        "value": {
+                            "status": FAILURE_EXAMPLE,
+                            "message": "Account not verified.",
+                            "err_code": "account_not_verified",
+                        }
+                    },
                 }
             }
         }

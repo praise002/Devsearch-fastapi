@@ -32,6 +32,13 @@ GET_MESSAGE_RESPONSES = {
                             "err_code": "insufficient_permission",
                         },
                     },
+                    "account_not_verified": {
+                        "value": {
+                            "status": FAILURE_EXAMPLE,
+                            "message": "Account not verified.",
+                            "err_code": "account_not_verified",
+                        }
+                    },
                     "permission_denied": {
                         "value": {
                             "status": FAILURE_EXAMPLE,
@@ -73,6 +80,13 @@ MARK_MESSAGE_RESPONSES = {
                             "err_code": "insufficient_permission",
                         },
                     },
+                    "account_not_verified": {
+                        "value": {
+                            "status": FAILURE_EXAMPLE,
+                            "message": "Account not verified.",
+                            "err_code": "account_not_verified",
+                        }
+                    },
                     "permission_denied": {
                         "value": {
                             "status": FAILURE_EXAMPLE,
@@ -103,10 +117,21 @@ GET_UNREAD_COUNT_RESPONSES = {
     403: {
         "content": {
             "application/json": {
-                "example": {
-                    "status": FAILURE_EXAMPLE,
-                    "message": "Your account has been disabled. Please contact support for assistance",
-                    "err_code": "insufficient_permission",
+                "examples": {
+                    "account_disabled": {
+                        "value": {
+                            "status": FAILURE_EXAMPLE,
+                            "message": "Your account has been disabled. Please contact support for assistance",
+                            "err_code": "insufficient_permission",
+                        }
+                    },
+                    "account_not_verified": {
+                        "value": {
+                            "status": FAILURE_EXAMPLE,
+                            "message": "Account not verified.",
+                            "err_code": "account_not_verified",
+                        }
+                    },
                 }
             }
         }
@@ -126,6 +151,13 @@ DELETE_RESPONSES = {
                             "message": "Your account has been disabled. Please contact support for assistance",
                             "err_code": "insufficient_permission",
                         },
+                    },
+                    "account_not_verified": {
+                        "value": {
+                            "status": FAILURE_EXAMPLE,
+                            "message": "Account not verified.",
+                            "err_code": "account_not_verified",
+                        }
                     },
                     "permission_denied": {
                         "value": {

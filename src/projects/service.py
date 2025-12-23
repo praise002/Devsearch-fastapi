@@ -1,6 +1,7 @@
 from typing import List, Optional
 
 from slugify import slugify
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, func, or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -55,20 +56,27 @@ class ProjectService:
         Create a new project
         """
 
-        slug = slugify(project_data["title"])
+        # Generate slug from title
+        base_slug = slugify(project_data["title"])
+        slug = base_slug
 
-        existing = await self.get_project_by_slug(slug, session)
-        if existing:
-            # Make slug unique by adding number
-            counter = 1
-            while existing:
-                slug = f"{slugify(project_data['title'])}-{counter}"
-                existing = await self.get_project_by_slug(slug, session)
+        # Ensure uniqueness
+        counter = 1
+        while True:
+            try:
+                new_project = Project(
+                    **project_data,
+                    slug=slug,
+                    owner_id=owner_id,
+                )
+                session.add(new_project)
+                await session.flush()
+                break
+            except IntegrityError:
+                await session.rollback()
+                slug = f"{base_slug}-{counter}"
                 counter += 1
 
-        new_project = Project(**project_data, slug=slug, owner_id=owner_id)
-
-        session.add(new_project)
         await session.commit()
         await session.refresh(new_project)
         return new_project
@@ -84,9 +92,25 @@ class ProjectService:
 
         # If title changed, update slug
         if "title" in update_data:
-            project.slug = slugify(update_data["title"])  # TODO: ENSURE UNIQUENESS
+            new_slug = slugify(update_data["title"])
 
-        session.add(project)
+            if new_slug != project.slug:
+                # Generate unique slug with database constraint
+                base_slug = new_slug
+                counter = 1
+
+                while True:
+                    try:
+                        project.slug = new_slug
+                        session.add(project)
+                        await session.flush()  # Check constraint without committing
+                        break  # Success!
+                    except IntegrityError:
+                        # Slug conflict, try next number
+                        await session.rollback()
+                        new_slug = f"{base_slug}-{counter}"
+                        counter += 1
+
         await session.commit()
         await session.refresh(project)
         return project

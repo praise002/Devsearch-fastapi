@@ -33,21 +33,21 @@ A powerful FastAPI-based platform designed to connect developers worldwide, enab
 - ✅ Skills management (add/remove skills)
 
 #### Project Management
-- [ ] Project CRUD operations
-- [ ] Project image upload
-- [ ] Project search and filtering
-- [ ] Project categorization with tags
-- [ ] Project slug generation and SEO
+- ✅ Project CRUD operations
+- ✅ Project image upload
+- ✅ Project search and filtering
+- ✅ Project categorization with tags
+- ✅ Project slug generation and SEO
 
 #### Review & Rating System
-- [ ] Project review endpoints
-- [ ] Rating calculation logic
-- [ ] Review moderation
-- [ ] Vote ratio calculations
+- ✅ Project review endpoints
+- ✅ Rating calculation logic
+- ✅ Review moderation
+- ✅ Vote ratio calculations
 
 ### 📅 Phase 4: Communication Features (PLANNED)
-- [ ] Inbox system between users
-- [ ] Inbox read/unread status
+- ✅ Inbox system between users
+- ✅ Inbox read/unread status
 
 ### 📅 Phase 5: Advanced Features (PLANNED)
 #### Search & Discovery
@@ -181,15 +181,16 @@ src/
 - `GET /api/v1/auth/google/callback` - Handle Google OAuth callback
 
 ### Profiles (Implemented)
-- `GET /api/v1/profiles/` - List profiles
-- `PATCH /api/v1/profiles/image/` - Update user image
-- `DELETE /api/v1/profiles/image/` - Delete user image
-- `GET /api/v1/profiles/{username}` - Get user profile
-- `PATCH /api/v1/profiles/{username}` - Update user profile
-- `POST /api/v1/profiles/{username}/skills` - Add skill
-- `PATCH /api/v1/profiles/{username}/skills` - Update a specific skill e.g adding description
-- `GET /api/v1/profiles/skills` - Retrieve a list of skills
-- `DELETE /api/v1/profiles/{username}/skills/{skill_id}` - Remove skill
+- `GET /api/v1/profiles/` - List all profiles with search and pagination
+- `GET /api/v1/profiles/me` - Get current authenticated user's profile
+- `PATCH /api/v1/profiles/me` - Update current user's profile
+- `GET /api/v1/profiles/{username}` - Get specific user's profile by username
+- `POST /api/v1/profiles/avatar` - Upload or update user's avatar image
+- `DELETE /api/v1/profiles/avatar` - Delete user's avatar
+- `POST /api/v1/profiles/me/skills` - Add skill to current user's profile
+- `GET /api/v1/profiles/{username}/skills` - Get all skills for a specific user
+- `PATCH /api/v1/profiles/me/skills/{skill_id}` - Update a specific skill in user's profile
+- `DELETE /api/v1/profiles/me/skills/{skill_id}` - Remove skill from current user's profile
 
 ### Projects (Implemented)
 - `GET /api/v1/projects/` - List projects

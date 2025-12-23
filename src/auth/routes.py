@@ -112,7 +112,7 @@ async def create_user_account(
 
 
 @router.post(
-    "/verification/verify",
+    "/account-verification",
     status_code=status.HTTP_200_OK,
     description="This endpoint verifies a user's email",
     responses=VERIFY_EMAIL_RESPONSES,
@@ -161,7 +161,7 @@ async def verify_user_account(
 
 
 @router.post(
-    "/verification",
+    "/verification/email-resend",
     status_code=status.HTTP_200_OK,
     description="This endpoint sends OTP to a user's email for verification",
     responses=RESEND_OTP_RESPONSES,
@@ -227,12 +227,6 @@ async def login_user(
             },
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
-
-    if not user.is_email_verified:
-        raise AccountNotVerified()
-
-    if not user.is_active:
-        raise UserNotActive()
 
     password_valid = verify_password(password, user.hashed_password)
     if password_valid:
@@ -325,12 +319,19 @@ async def password_reset_request(
             extra={
                 "event_type": "password_reset_invalid_email",
                 "email": email,
-                # TODO: test it
-                # "client_ip": request.client.host,
-                # "user_agent": request.headers.get("user-agent"),
+                "client_ip": request.client.host,
+                "user_agent": request.headers.get("user-agent"),
                 "timestamp": datetime.now(timezone.utc),
             },
         )
+        # logging.warning(
+        #     f"Password reset attempt on invalid/inactive account | "
+        #     f"event_type=password_reset_invalid_email | "
+        #     f"email={email} | "
+        #     f"client_ip={request.client.host} | "
+        #     f"user_agent={request.headers.get('user-agent')} | "
+        #     f"timestamp={datetime.now(timezone.utc)}"
+        # )
         return {
             "status": "success",
             "message": "If that email address is in our database, we will send you an email to reset your password",
@@ -353,13 +354,12 @@ async def password_reset_request(
 
 
 @router.post(
-    "/passwords/reset/verify",
+    "/passwords/reset/otp-verify",
     status_code=status.HTTP_200_OK,
     responses=PASSWORD_RESET_VERIFY_RESPONSES,
 )
 async def password_reset_verify_otp(
     data: PasswordResetVerifyOtpModel,
-    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
 ):
     email = data.email
