@@ -234,6 +234,54 @@ def register_all_errors(app: FastAPI):
             },
         ),
     )
+    
+    app.add_exception_handler(
+        InvalidFileType,
+        create_exception_handler(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            initial_detail={
+                "status": "failure",
+                "message": "Invalid file type",
+                "err_code": "invalid_file_type",
+            },
+        ),
+    )
+
+    app.add_exception_handler(
+        FileTooLarge,
+        create_exception_handler(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            initial_detail={
+                "status": "failure",
+                "message": "File size exceeds maximum allowed size",
+                "err_code": "file_too_large",
+            },
+        ),
+    )
+
+    app.add_exception_handler(
+        InvalidFileContent,
+        create_exception_handler(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            initial_detail={
+                "status": "failure",
+                "message": "File must be an image",
+                "err_code": "invalid_file_content",
+            },
+        ),
+    )
+
+    app.add_exception_handler(
+        ImageUploadFailed,
+        create_exception_handler(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            initial_detail={
+                "status": "failure",
+                "message": "Failed to upload image",
+                "err_code": "image_upload_failed",
+            },
+        ),
+    )
 
     @app.exception_handler(500)
     async def internal_server_error(request, exc):
@@ -249,6 +297,12 @@ def register_all_errors(app: FastAPI):
 
 class BaseException(Exception):
     """This is the base class for all Base errors"""
+
+    pass
+
+
+class ImageUploadFailed(BaseException):
+    """Image upload to Cloudinary failed"""
 
     pass
 
@@ -351,6 +405,38 @@ class NotFound(BaseException):
     """Resource not found"""
 
     def __init__(self, message: str = "Resource not found"):
+        self.message = message
+        super().__init__(self.message)
+
+
+class InvalidFileType(BaseException):
+    """Invalid file type uploaded"""
+
+    def __init__(self, message: str = "Invalid file type"):
+        self.message = message
+        super().__init__(self.message)
+
+
+class FileTooLarge(BaseException):
+    """File exceeds maximum allowed size"""
+
+    def __init__(self, message: str = "File size exceeds maximum allowed size"):
+        self.message = message
+        super().__init__(self.message)
+
+
+class InvalidFileContent(BaseException):
+    """File content is invalid or corrupted"""
+
+    def __init__(self, message: str = "File must be an image"):
+        self.message = message
+        super().__init__(self.message)
+
+
+class ImageUploadFailed(BaseException):
+    """Image upload to Cloudinary failed"""
+
+    def __init__(self, message: str = "Failed to upload image"):
         self.message = message
         super().__init__(self.message)
 

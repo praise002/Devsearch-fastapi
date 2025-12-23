@@ -1,9 +1,15 @@
 from typing import Optional
 
 import cloudinary.uploader
-from fastapi import HTTPException, UploadFile, status
+from fastapi import HTTPException, UploadFile
 
-from src.errors import NoFilenameProvided
+from src.errors import (
+    FileTooLarge,
+    ImageUploadFailed,
+    InvalidFileContent,
+    InvalidFileType,
+    NoFilenameProvided,
+)
 
 
 class CloudinaryService:
@@ -22,15 +28,13 @@ class CloudinaryService:
 
         file_ext = file.filename.split(".")[-1].lower()
         if file_ext not in CloudinaryService.ALLOWED_EXTENSIONS:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid file type. Allowed types: {', '.join(CloudinaryService.ALLOWED_EXTENSIONS)}",
+            allowed = ", ".join(CloudinaryService.ALLOWED_EXTENSIONS)
+            raise InvalidFileType(
+                message=f"Invalid file type. Allowed types: {allowed}"
             )
 
         if not file.content_type or not file.content_type.startswith("image/"):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="File must be an image"
-            )
+            raise InvalidFileContent()
 
     async def upload_image(
         file: UploadFile,
@@ -59,9 +63,9 @@ class CloudinaryService:
             contents = await file.read()
 
             if len(contents) > CloudinaryService.MAX_FILE_SIZE:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"File size exceeds maximum allowed size of {CloudinaryService.MAX_FILE_SIZE / (1024*1024)}MB",
+                max_size_mb = CloudinaryService.MAX_FILE_SIZE / (1024 * 1024)
+                raise FileTooLarge(
+                    message=f"File size exceeds maximum allowed size of {max_size_mb}MB"
                 )
 
             upload_options = {
@@ -91,11 +95,8 @@ class CloudinaryService:
         except HTTPException:
             raise
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to upload image: {str(e)}",
-            )
-            
+            raise ImageUploadFailed(message=f"Failed to upload image: {str(e)}")
+
     @staticmethod
     async def upload_image_from_url(
         image_url: str,
@@ -105,13 +106,13 @@ class CloudinaryService:
     ) -> Optional[str]:
         """
         Upload image from URL directly to Cloudinary
-        
+
         Args:
             image_url: URL of the image to upload
             folder: Cloudinary folder
             public_id: Optional custom public ID
             overwrite: Whether to overwrite existing
-            
+
         Returns:
             str: Secure URL of uploaded image, or None if failed
         """
@@ -144,12 +145,10 @@ class CloudinaryService:
         except Exception as e:
             # Don't raise - just log and return None (background task)
             import logging
+
             logging.error(
                 "Failed to upload profile picture from URL",
-                extra={
-                    "image_url": image_url,
-                    "error": str(e)
-                }
+                extra={"image_url": image_url, "error": str(e)},
             )
             return None
 
@@ -194,5 +193,3 @@ class CloudinaryService:
         except Exception:
             pass
         return None
-
-# TODO: FIX HE HTTP EXCEPTIONS

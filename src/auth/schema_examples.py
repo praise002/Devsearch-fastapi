@@ -1,13 +1,9 @@
-from src.auth.utils import (
+from src.auth.schemas import (
     ACCESS_TOKEN_EXAMPLE,
     EMAIL_EXAMPLE,
     FAILURE_EXAMPLE,
     REFRESH_TOKEN_EXAMPLE,
 )
-
-# VALIDATION_ERROR = {
-#     "detail": [{"loc": ["string", 0], "msg": "string", "type": "string"}]
-# }
 
 VALIDATION_ERROR = {
     "value": {"detail": [{"loc": ["string", 0], "msg": "string", "type": "string"}]},

@@ -1,5 +1,5 @@
 from src.auth.schema_examples import UNAUTHORIZED
-from src.auth.utils import FAILURE_EXAMPLE
+from src.auth.schemas import FAILURE_EXAMPLE
 
 GET_USER_MESSAGES_RESPONSES = {
     # 200 & 422 shows by default

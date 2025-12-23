@@ -52,7 +52,7 @@ async def upload_profile_picture_task(
 
             if user:
                 await user_service.update_user(
-                    user, {"avater_url": cloudinary_url}, session
+                    user, {"avatar_url": cloudinary_url}, session
                 )
 
                 logging.info(

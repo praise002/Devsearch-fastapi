@@ -1,5 +1,10 @@
 from src.auth.schema_examples import UNAUTHORIZED, VALIDATION_ERROR
-from src.auth.utils import EMAIL_EXAMPLE, FAILURE_EXAMPLE, SUCCESS_EXAMPLE, UUID_EXAMPLE
+from src.auth.schemas import (
+    EMAIL_EXAMPLE,
+    FAILURE_EXAMPLE,
+    SUCCESS_EXAMPLE,
+    UUID_EXAMPLE,
+)
 
 PROFILE_RES_EX = {
     "id": UUID_EXAMPLE,

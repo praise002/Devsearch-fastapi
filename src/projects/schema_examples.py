@@ -1,5 +1,5 @@
 from src.auth.schema_examples import UNAUTHORIZED, VALIDATION_ERROR
-from src.auth.utils import FAILURE_EXAMPLE
+from src.auth.schemas import FAILURE_EXAMPLE
 
 CREATE_PROJECT_RESPONSES = {
     # 201 & 422 by default

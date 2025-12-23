@@ -56,4 +56,3 @@ cloudinary.config(
     api_secret=config("CLOUDINARY_API_SECRET"),
     secure=True,
 )
-# TODO: How do i add this here MEDIA_TAG": "devsearch/media",
