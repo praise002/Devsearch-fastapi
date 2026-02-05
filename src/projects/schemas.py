@@ -1,6 +1,5 @@
 from datetime import datetime
 
-from fastapi import File
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.constants import VoteType

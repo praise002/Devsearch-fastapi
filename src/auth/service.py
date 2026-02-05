@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from typing import List
 
 from decouple import config
@@ -13,9 +12,14 @@ from src.auth.utils import (
     decode_token,
     hash_password,
 )
-from src.db.models import BlacklistedToken, Otp, OutstandingToken, Profile, User
-from src.db.redis import add_jti_to_blocklist, token_in_blacklist
-from src.errors import InvalidToken, UserNotActive
+from src.db.models import Otp, Profile, User
+from src.db.redis import (
+    add_jti_to_user_sessions,
+    delete_all_user_sessions,
+    is_jti_in_user_sessions,
+    remove_jti_from_user_sessions,
+)
+from src.errors import UserNotActive
 
 
 class UserService:
@@ -36,7 +40,7 @@ class UserService:
         result = await session.exec(statement)
         otp_record = result.first()
         return otp_record
-    
+
     async def get_user_otps(self, user_id: str, session: AsyncSession) -> List[Otp]:
         statement = select(Otp).where(Otp.user_id == user_id)
         result = await session.exec(statement)
@@ -159,100 +163,19 @@ class UserService:
         await session.commit()
         return user
 
-    async def create_outstanding_token(
-        self, user_id: str, jti: str, expires_at: datetime, session: AsyncSession
-    ):
-        """Store a token's JTI as an outstanding (active) token"""
-        outstanding_token = OutstandingToken(
-            user_id=user_id, jti=jti, expires_at=expires_at
-        )
-        session.add(outstanding_token)
-        await session.commit()
-        await session.refresh(outstanding_token)
-        return outstanding_token
-
-    async def blacklist_user_token(self, jti: str, session: AsyncSession):
-        statement = select(OutstandingToken).where(OutstandingToken.jti == jti)
-        result = await session.exec(statement)
-        token_record = result.first()
-
-        blacklisted_token = BlacklistedToken(token_id=token_record.id)
-        session.add(blacklisted_token)
-
-        # Also add to Redis for fast lookup during requests
-        await add_jti_to_blocklist(jti)
-
-        await session.commit()
-
-    async def blacklist_all_user_tokens(self, user_id: str, session: AsyncSession):
-        """Move all user tokens from outstanding to blacklisted"""
-
-        statement = select(OutstandingToken).where(OutstandingToken.user_id == user_id)
-        result = await session.exec(statement)
-        user_tokens = result.all()
-
-        for token_record in user_tokens:
-            blacklisted_token = BlacklistedToken(token_id=token_record.id)
-            session.add(blacklisted_token)
-
-            # Also add to Redis for fast lookup during requests
-            await add_jti_to_blocklist(token_record.jti)
-
-        await session.commit()
-
-    async def is_token_blacklisted(self, jti: str, session: AsyncSession) -> bool:
-        """Check if a token JTI is blacklisted"""
-        is_blacklisted = await token_in_blacklist(jti)
-        if is_blacklisted:
-            return True
-
-        # fallback
-        statement = (
-            select(BlacklistedToken)
-            .join(OutstandingToken)
-            .where(OutstandingToken.jti == jti)
-        )
-        result = await session.exec(statement)
-        blacklisted_record = result.first()
-
-        return blacklisted_record is not None
-
-    async def cleanup_expired_tokens(self, session: AsyncSession):
-        """Remove expired tokens from outstanding tokens table"""
-        now = datetime.now(timezone.utc)
-        statement = select(OutstandingToken).where(OutstandingToken.expires_at < now)
-        result = await session.exec(statement)
-        expired_tokens = result.all()
-
-        for token in expired_tokens:
-            await session.delete(token)
-
-        await session.commit()
-
-    async def cleanup_blacklisted_tokens(self, session: AsyncSession):
-        """Remove blacklisted tokens from blacklisted tokens table"""
-        statement = select(BlacklistedToken)
-        result = await session.exec(statement)
-        blacklisted_tokens = result.all()
-
-        for token in blacklisted_tokens:
-            await session.delete(token)
-
-        await session.commit()
-
-    async def create_token_pair(self, user_data: dict, session: AsyncSession) -> dict:
+    async def create_token_pair(self, user_data: dict, _: AsyncSession) -> dict:
         """Create both access and refresh tokens"""
         refresh_token = create_refresh_token(user_data)
 
         refresh_payload = decode_token(refresh_token)
         refresh_jti = refresh_payload["jti"]
-        expires_at = datetime.fromtimestamp(refresh_payload["exp"])
+        # expires_at = datetime.fromtimestamp(refresh_payload["exp"])
 
-        await self.create_outstanding_token(
-            user_id=user_data["user_id"],
+        # Add JTI to user's active sessions in Redis
+        await add_jti_to_user_sessions(
+            user_id=str(user_data["user_id"]),
             jti=refresh_jti,
-            expires_at=expires_at,
-            session=session,
+            expiry_seconds=7776000,  # 90 days
         )
 
         access_token = create_access_token(user_data)
@@ -262,12 +185,14 @@ class UserService:
             "refresh": refresh_token,
         }
 
-    async def validate_token(self, token: str, session: AsyncSession):
-        payload = decode_token(token)
-        jti = payload["jti"]
+    async def revoke_user_token(self, user_id: str, jti: str) -> None:
+        """Remove a JTI from user's active sessions (logout single device)"""
+        await remove_jti_from_user_sessions(user_id=user_id, jti=jti)
 
-        user_service = UserService()
-        if await user_service.is_token_blacklisted(jti, session):
-            raise InvalidToken()
+    async def revoke_all_user_tokens(self, user_id: str) -> None:
+        """Delete all active sessions for a user (logout all devices)"""
+        await delete_all_user_sessions(user_id=user_id)
 
-        return payload
+    async def is_token_valid(self, user_id: str, jti: str) -> bool:
+        """Check if a refresh token JTI is in the user's active sessions"""
+        return await is_jti_in_user_sessions(user_id=user_id, jti=jti)

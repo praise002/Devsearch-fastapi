@@ -1,15 +1,9 @@
-import asyncio
-from datetime import datetime, timedelta
-from unittest import mock
-from unittest.mock import patch
-
 import pytest
 from httpx import AsyncClient
-from pydantic import Json
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.auth.service import UserService
-from src.db.models import Otp, Profile, ProfileSkill, Skill, User
+from src.db.models import Otp, ProfileSkill, Skill, User
 
 
 class TestUserRegistration:

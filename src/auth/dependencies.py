@@ -41,11 +41,6 @@ class TokenBearer(HTTPBearer):
         if not self.token_valid(token):
             raise InvalidToken()
 
-        # Check if token is blacklisted
-        jti = token_data.get("jti")
-        if jti and await user_service.is_token_blacklisted(jti, session):
-            raise InvalidToken()
-
         self.verify_token_data(token_data)
 
         return token_data
@@ -60,15 +55,47 @@ class TokenBearer(HTTPBearer):
 
 
 class AccessTokenBearer(TokenBearer):
+    """Access tokens are stateless - no Redis check needed"""
+
     def verify_token_data(self, token_data: dict) -> None:
         if token_data and token_data.get("token_type") != "access":
             raise AccessTokenRequired()
 
 
 class RefreshTokenBearer(TokenBearer):
-    def verify_token_data(self, token_data: dict) -> None:
+    """Refresh tokens must be validated against Redis allowlist"""
+
+    async def __call__(
+        self, request: Request, session: AsyncSession = Depends(get_session)
+    ):
+        # Get token and decode it
+        creds = await super(HTTPBearer, self).__call__(request)
+        if creds is None:
+            raise NotAuthenticated()
+
+        token = creds.credentials
+
+        try:
+            token_data = decode_token(token)
+        except Exception:
+            raise InvalidToken()
+
+        # Validate token type
         if token_data and token_data.get("token_type") != "refresh":
             raise RefreshTokenRequired()
+
+        # Extract data for allowlist check
+        jti = token_data.get("jti")
+        user_id = token_data.get("user", {}).get("user_id")
+
+        if not jti or not user_id:
+            raise InvalidToken()
+
+        # Check if JTI is in user's active sessions (allowlist)
+        if not await user_service.is_token_valid(user_id=user_id, jti=jti):
+            raise InvalidToken()
+
+        return token_data
 
 
 async def get_current_user(

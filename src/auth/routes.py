@@ -42,7 +42,7 @@ from src.auth.utils import (
 )
 from src.config import Config
 from src.db.main import get_session
-from src.db.redis import add_jti_to_blocklist
+from src.db.redis import add_jti_to_blocklist, remove_jti_from_user_sessions
 from src.errors import (
     GoogleAuthenticationFailed,
     InvalidOldPassword,
@@ -255,21 +255,18 @@ async def refresh_token(
     token_details: dict = Depends(RefreshTokenBearer()),
 ):
     old_jti = token_details["jti"]
-    await user_service.blacklist_user_token(old_jti, session)
+    user_id = token_details["user"]["user_id"]
 
-    await add_jti_to_blocklist(old_jti)
-    expiry_timestamp = token_details["exp"]
+    await remove_jti_from_user_sessions(user_id=user_id, jti=old_jti)
 
-    if datetime.fromtimestamp(expiry_timestamp) > datetime.now():
-        new_token = await user_service.create_token_pair(token_details["user"], session)
+    # Create new token pair (automatically adds new JTI to Redis)
+    new_token = await user_service.create_token_pair(token_details["user"], session)
 
-        return {
-            "status": "success",
-            "message": "Token refreshed successfully",
-            **new_token,
-        }
-
-    raise InvalidToken()
+    return {
+        "status": "success",
+        "message": "Token refreshed successfully",
+        **new_token,
+    }
 
 
 @router.post(
@@ -277,12 +274,14 @@ async def refresh_token(
     status_code=status.HTTP_200_OK,
     responses=LOGOUT_RESPONSES,
 )
-async def revoke_token(
+async def logout(
     token_details: dict = Depends(RefreshTokenBearer()),
     session: AsyncSession = Depends(get_session),
 ):
     jti = token_details["jti"]
-    await user_service.blacklist_user_token(jti, session)
+    user_id = token_details["user"]["user_id"]
+    # Remove this specific JTI from user's sessions
+    await user_service.revoke_user_token(user_id=user_id, jti=jti)
     return {"status": "success", "message": "Logged Out Successfully"}
 
 
@@ -291,16 +290,17 @@ async def revoke_token(
     status_code=status.HTTP_200_OK,
     responses=LOGOUT_ALL_RESPONSES,
 )
-async def revoke_all(
+async def logout_all(
     user=Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    await user_service.blacklist_all_user_tokens(user.id, session)
+    # Delete entire Redis Set for this user
+    await user_service.revoke_all_user_tokens(user_id=str(user.id))
     return {"status": "success", "message": "Logged out of all devices successfully"}
 
 
 @router.post(
-    "/passwords/reset",
+    "/password/reset",
     status_code=status.HTTP_200_OK,
     responses=PASSWORD_RESET_REQUEST_RESPONSES,
 )
@@ -344,7 +344,7 @@ async def password_reset_request(
 
 
 @router.post(
-    "/passwords/reset/otp-verify",
+    "/password/reset/otp-verify",
     status_code=status.HTTP_200_OK,
     responses=PASSWORD_RESET_VERIFY_RESPONSES,
 )
@@ -379,7 +379,7 @@ async def password_reset_verify_otp(
 
 
 @router.post(
-    "/passwords/reset/complete",
+    "/password/reset/complete",
     status_code=status.HTTP_200_OK,
     responses=PASSWORD_RESET_COMPLETE_RESPONSES,
 )
@@ -415,7 +415,7 @@ async def password_reset_done(
 
 
 @router.post(
-    "/passwords/change",
+    "/password/change",
     status_code=status.HTTP_200_OK,
     responses=PASSWORD_CHANGE_RESPONSES,
 )
@@ -438,7 +438,8 @@ async def password_change(
     hashed_password = hash_password(data.new_password)
     await user_service.update_user(user, {"hashed_password": hashed_password}, session)
 
-    await user_service.blacklist_all_user_tokens(user.id, session)  # or str(user.id)
+    # Invalidate all sessions after password change
+    await user_service.revoke_all_user_tokens(user_id=str(user.id))
 
     user_data = {
         "email": user.email,
@@ -510,7 +511,7 @@ async def google_auth_callback(
         else:
             first_name = user_info.get("given_name")
             last_name = user_info.get("family_name")
-            picture_url = user_info.get("picture") 
+            picture_url = user_info.get("picture")
             auth_provider = user_info.get("iss")
             print(auth_provider)
             google_id = user_info.get("sub")
@@ -542,14 +543,14 @@ async def google_auth_callback(
                     user_id=str(new_user.id),
                     image_url=picture_url,
                 )
-                
+
                 logging.info(
                     "Profile picture upload task queued for new user",
                     extra={
                         "event_type": "profile_picture_task_queued",
                         "user_id": str(new_user.id),
-                        "email": email
-                    }
+                        "email": email,
+                    },
                 )
 
             return response
@@ -557,6 +558,3 @@ async def google_auth_callback(
     except Exception as e:
         logging.exception(f"Google authentication failed: {str(e)}")
         raise GoogleAuthenticationFailed()
-
-
-

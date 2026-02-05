@@ -3,7 +3,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from pydantic import EmailStr, model_validator
-from slugify import slugify
 from sqlalchemy import DateTime, Integer, String, UniqueConstraint, func
 from sqlmodel import Column, Field, Relationship, SQLModel
 
@@ -19,9 +18,15 @@ class User(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     first_name: str = Field(max_length=50, min_length=1)
     last_name: str = Field(max_length=50, min_length=1)
-    username: str = Field(sa_column=Column(String(50), nullable=False, unique=True), min_length=1)
-    email: EmailStr = Field(sa_column=Column(String(50), nullable=False, unique=True), min_length=1)
-    google_id: str | None = Field(sa_column=Column(String(50), unique=True), default=None)
+    username: str = Field(
+        sa_column=Column(String(50), nullable=False, unique=True), min_length=1
+    )
+    email: EmailStr = Field(
+        sa_column=Column(String(50), nullable=False, unique=True), min_length=1
+    )
+    google_id: str | None = Field(
+        sa_column=Column(String(50), unique=True), default=None
+    )
     auth_provider: str | None = Field(max_length=50, default=None, nullable=True)
     hashed_password: str | None = Field(default=None, exclude=True, nullable=True)
     is_active: bool = True
@@ -45,9 +50,7 @@ class User(SQLModel, table=True):
             nullable=False,
         ),
     )
-    jwts: list["OutstandingToken"] | None = Relationship(
-        back_populates="user", passive_deletes="all"
-    )
+
     otps: list["Otp"] | None = Relationship(
         back_populates="user", passive_deletes="all"
     )
@@ -62,38 +65,6 @@ class User(SQLModel, table=True):
 
     def __repr__(self):
         return self.full_name
-
-
-class OutstandingToken(SQLModel, table=True):
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    user_id: uuid.UUID | None = Field(
-        default=None, foreign_key="user.id", ondelete="CASCADE"
-    )
-    user: User | None = Relationship(back_populates="jwts")
-    jti: str = Field(unique=True)
-    created_at: Optional[datetime] = Field(
-        default=None,
-        sa_column=Column(
-            DateTime(timezone=True),
-            server_default=func.now(),
-            nullable=False,
-        ),
-    )
-    expires_at: datetime
-    blacklisted_tokens: list["BlacklistedToken"] | None = Relationship(
-        back_populates="token", passive_deletes="all"
-    )
-
-    def __repr__(self):
-        return f"Refresh JTI: {self.jti}"
-
-
-class BlacklistedToken(SQLModel, table=True):
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    token_id: uuid.UUID | None = Field(
-        default=None, foreign_key="outstandingtoken.id", ondelete="CASCADE"
-    )
-    token: OutstandingToken | None = Relationship(back_populates="blacklisted_tokens")
 
 
 class Otp(SQLModel, table=True):
@@ -183,7 +154,7 @@ class Profile(SQLModel, table=True):
     avatar_url: str | None = Field(
         default=None,
         max_length=200,
-    )  
+    )
     created_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(
@@ -220,7 +191,6 @@ class Profile(SQLModel, table=True):
     messages: list["Message"] | None = Relationship(
         back_populates="recipient", passive_deletes="all"
     )
-
     projects: list["Project"] | None = Relationship(
         back_populates="owner", passive_deletes="all"
     )
