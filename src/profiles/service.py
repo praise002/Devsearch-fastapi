@@ -1,5 +1,6 @@
 from typing import List, Optional
 
+from sqlalchemy import func
 from sqlmodel import or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -29,11 +30,16 @@ class ProfileService:
                     Profile.location.ilike(pattern),  # Search location
                 )
             )
+            
+        # Get total count (without limit/offset)
+        count_query = select(func.count()).select_from(statement.subquery())
+        count_result = await session.exec(count_query)
+        total_count = count_result.one()
 
         statement = statement.offset(offset).limit(limit)
 
         result = await session.exec(statement)
-        return result.all()
+        return result.all(), total_count
 
     async def get_profile_by_username(
         self, username: str, session: AsyncSession

@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from src.auth.utils import SUCCESS_EXAMPLE
+from src.auth.schemas import SUCCESS_EXAMPLE
 
 
 # profile_id will be a path param for the skill creation
@@ -53,15 +53,18 @@ class SkillDataResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
 class SkillResponse(BaseModel):
     status: str
     message: str
     data: SkillDataResponse
-    
+
+
 class SkillListResponse(BaseModel):
     status: str
     message: str
     data: list[SkillDataResponse]
+
 
 class ProfileData(BaseModel):
     # User fields
@@ -82,7 +85,7 @@ class ProfileData(BaseModel):
     ln: str | None = None
     website: str | None = None
 
-    skills: list[SkillResponse] = []
+    skills: list[SkillDataResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -93,7 +96,7 @@ class ProfileResponse(BaseModel):
     data: ProfileData
 
 
-class ProfileListData(BaseModel):
+class ProfileListResult(BaseModel):
     id: str
     user_id: str
     username: str
@@ -105,10 +108,17 @@ class ProfileListData(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PaginationData(BaseModel):
+    count: int
+    next: str | None = None
+    previous: str | None = None
+    results: list[ProfileListResult]
+
+
 class ProfileListResponse(BaseModel):
     status: str
     message: str
-    data: list[ProfileListData]
+    data: PaginationData
 
 
 class AvatarUploadResponse(BaseModel):

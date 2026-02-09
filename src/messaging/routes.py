@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.auth.dependencies import get_current_user
-from src.auth.utils import SUCCESS_EXAMPLE
+from src.auth.schemas import SUCCESS_EXAMPLE
 from src.db.main import get_session
 from src.db.models import User
 from src.errors import InsufficientPermission, NotFound

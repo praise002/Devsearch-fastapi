@@ -75,9 +75,9 @@ class RefreshTokenBearer(TokenBearer):
 
         token = creds.credentials
 
-        try:
-            token_data = decode_token(token)
-        except Exception:
+        token_data = decode_token(token)
+
+        if not token_data:
             raise InvalidToken()
 
         # Validate token type
@@ -105,9 +105,12 @@ async def get_current_user(
     session: AsyncSession = Depends(get_session),
 ):
 
-    user_email = token_details["user"]["email"]
+    user_id = token_details["user"]["user_id"]
 
-    user = await user_service.get_user_by_email(user_email, session)
+    user = await user_service.get_user(user_id, session)
+    
+    if not user:
+        raise NotAuthenticated()
 
     if not user.is_active:
         raise UserNotActive()

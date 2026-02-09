@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from urllib.parse import urlencode
+
+from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, status
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.auth.dependencies import get_current_user
-from src.auth.utils import SUCCESS_EXAMPLE
+from src.auth.schemas import SUCCESS_EXAMPLE
 from src.cloudinary_service import CloudinaryService
 from src.db.main import get_session
 from src.db.models import Profile, ProfileSkill, User
@@ -14,6 +16,7 @@ from src.profiles.schema_examples import (
     DELETE_AVATAR_RESPONSES,
     DELETE_SKILL_RESPONSES,
     GET_USER_PROFILE_RESPONSES,
+    GET_USER_PROFILES_RESPONSES,
     GET_USER_SKILLS_RESPONSES,
     UPDATE_PROFILE_RESPONSES,
     UPDATE_SKILL_RESPONSES,
@@ -22,13 +25,15 @@ from src.profiles.schema_examples import (
 )
 from src.profiles.schemas import (
     AvatarUploadResponse,
+    PaginationData,
     ProfileData,
-    ProfileListData,
     ProfileListResponse,
+    ProfileListResult,
     ProfileResponse,
     ProfileUpdate,
     SkillCreate,
     SkillData,
+    SkillDataResponse,
     SkillListResponse,
     SkillResponse,
     SkillUpdate,
@@ -41,8 +46,11 @@ profile_service = ProfileService()
 cloudinary_service = CloudinaryService()
 
 
-@router.get("/", response_model=ProfileListResponse)
+@router.get(
+    "/", response_model=ProfileListResponse, responses=GET_USER_PROFILES_RESPONSES
+)
 async def get_profiles(
+    request: Request,
     search: str = Query(None, description="Search by username, intro, or location"),
     limit: int = Query(20, ge=1, le=100, description="Number of profiles to return"),
     offset: int = Query(0, ge=0, description="Number of profiles to skip"),
@@ -56,30 +64,60 @@ async def get_profiles(
     - GET /profiles/?search=python → Returns profiles mentioning "python"
     - GET /profiles/?limit=10&offset=20 → Returns profiles 21-30
     """
-    profiles = await profile_service.get_all_profiles(
+    profiles, total_count = await profile_service.get_all_profiles(
         session=session, search=search, limit=limit, offset=offset
     )
 
-    # Convert to response format (add user data)
-    response = []
-    for profile in profiles:
-        response.append(
-            ProfileListResponse(
-                status=SUCCESS_EXAMPLE,
-                message="Profiles retrieved successfully",
-                data=ProfileListData(
-                    id=str(profile.id),
-                    user_id=str(profile.user_id),
-                    username=profile.user.username,
-                    full_name=profile.user.full_name,
-                    short_intro=profile.short_intro,
-                    location=profile.location,
-                    avatar_url=profile.avatar_url,
-                ),
-            )
-        )
+    # Build pagination URLs
+    base_url = str(request.url).split("?")[0]
+    query_params = {}
 
-    return response
+    if search:
+        query_params["search"] = search
+
+    # Next page URL
+    next_offset = offset + limit
+    if next_offset < total_count:
+        next_params = query_params.copy()
+        next_params["limit"] = limit
+        next_params["offset"] = next_offset
+        next_url = f"{base_url}?{urlencode(next_params)}"
+    else:
+        next_url = None
+
+    # Previous page URL
+    previous_offset = offset - limit
+    if offset > 0:
+        previous_params = query_params.copy()
+        previous_params["limit"] = limit
+        previous_params["offset"] = max(0, previous_offset)
+        previous_url = f"{base_url}?{urlencode(previous_params)}"
+    else:
+        previous_url = None
+
+    profiles_data = [
+        ProfileListResult(
+            id=str(profile.id),
+            user_id=str(profile.user_id),
+            username=profile.user.username,
+            full_name=profile.user.full_name,
+            short_intro=profile.short_intro,
+            location=profile.location,
+            avatar_url=profile.avatar_url,
+        )
+        for profile in profiles
+    ]
+
+    return ProfileListResponse(
+        status="success",
+        message="Profiles retrieved successfully",
+        data=PaginationData(
+            count=total_count,
+            next=next_url,
+            previous=previous_url,
+            results=profiles_data,
+        ),
+    )
 
 
 @router.get(
@@ -113,8 +151,8 @@ async def get_my_profile(
         for profile_skill in profile.skills:
             if profile_skill.skill:
                 skills_response.append(
-                    SkillResponse(
-                        id=profile_skill.skill.id,
+                    SkillDataResponse(
+                        id=str(profile_skill.skill.id),
                         name=profile_skill.skill.name,
                         description=profile_skill.description,
                     )
@@ -125,7 +163,7 @@ async def get_my_profile(
         message="Profile retrieved successfully",
         data=ProfileData(
             # User fields
-            id=user.id,
+            id=str(user.id),
             email=user.email,
             first_name=user.first_name,
             last_name=user.last_name,

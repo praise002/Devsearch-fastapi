@@ -23,6 +23,12 @@ from src.errors import UserNotActive
 
 
 class UserService:
+    async def get_user(self, user_id: str, session: AsyncSession):
+        statement = select(User).where(User.id == user_id)
+        result = await session.exec(statement)
+        user = result.first()
+        return user
+    
     async def get_user_by_email(self, email: str, session: AsyncSession):
         statement = select(User).where(User.email == email)
         result = await session.exec(statement)

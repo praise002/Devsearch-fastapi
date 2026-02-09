@@ -15,7 +15,9 @@ async def init_db():
     async with async_engine.begin() as conn:
         # await conn.run_sync(SQLModel.metadata.drop_all)
 
-        await conn.run_sync(SQLModel.metadata.create_all)  # used sync cos it doesn't execute asynchronously
+        await conn.run_sync(
+            SQLModel.metadata.create_all
+        )  # used sync cos it doesn't execute asynchronously
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
@@ -26,9 +28,11 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     async with Session() as session:
         yield session
 
+
 from contextlib import asynccontextmanager
 
-# TODO: REMOVE LATER 
+
+# TODO: REMOVE LATER
 @asynccontextmanager
 async def life_span(app: FastAPI):
     await init_db()

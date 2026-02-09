@@ -42,12 +42,12 @@ from src.auth.utils import (
 )
 from src.config import Config
 from src.db.main import get_session
-from src.db.redis import add_jti_to_blocklist, remove_jti_from_user_sessions
+from src.db.redis import remove_jti_from_user_sessions
 from src.errors import (
+    AccountNotVerified,
     GoogleAuthenticationFailed,
     InvalidOldPassword,
     InvalidOtp,
-    InvalidToken,
     NotFound,
     PasswordMismatch,
     PasswordSameAsOld,
@@ -227,6 +227,12 @@ async def login_user(
             },
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
+        
+    if not user.is_active:
+        raise UserNotActive()
+
+    if not user.is_email_verified:
+        raise AccountNotVerified()
 
     password_valid = verify_password(password, user.hashed_password)
     if password_valid:

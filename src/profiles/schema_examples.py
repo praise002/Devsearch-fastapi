@@ -35,6 +35,46 @@ PROFILE_RES_EX = {
     ],
 }
 
+PROFILES = {
+    "count": 150,
+    "next": "http://localhost:8000/profiles/?limit=20&offset=20",
+    "previous": "null",
+    "results": [
+        {
+            "id": "uuid1",
+            "user_id": "user_uuid1",
+            "username": "john_doe",
+            "full_name": "John Doe",
+            "short_intro": "Python developer",
+            "location": "New York",
+            "avatar_url": "https://example.com/avatars/johndoe.jpg",
+        },
+        {
+            "id": "uuid2",
+            "user_id": "user_uuid2",
+            "username": "john_tom",
+            "full_name": "John Tom",
+            "short_intro": "AI Engineer",
+            "location": "SF",
+            "avatar_url": "https://example.com/avatars/johndoe.jpg",
+        },
+    ],
+}
+
+GET_USER_PROFILES_RESPONSES = {
+    200: {
+        "content": {
+            "application/json": {
+                "example": {
+                    "status": SUCCESS_EXAMPLE,
+                    "message": "Profiles retrieved successfully",
+                    "data": PROFILES,
+                }
+            }
+        }
+    },
+}
+
 GET_USER_PROFILE_RESPONSES = {
     200: {
         "content": {

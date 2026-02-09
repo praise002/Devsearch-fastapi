@@ -1,6 +1,8 @@
+import logging
 from typing import Any, Callable
 
 from fastapi import FastAPI, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 
@@ -234,7 +236,7 @@ def register_all_errors(app: FastAPI):
             },
         ),
     )
-    
+
     app.add_exception_handler(
         InvalidFileType,
         create_exception_handler(
@@ -283,16 +285,9 @@ def register_all_errors(app: FastAPI):
         ),
     )
 
-    @app.exception_handler(500)
-    async def internal_server_error(request, exc):
-        return JSONResponse(
-            content={
-                "status": "failure",
-                "message": "Ooops! Something went wrong",
-                "err_code": "server_error",
-            },
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        )
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+
+    app.add_exception_handler(RequestValidationError, internal_server_error_handler)
 
 
 class BaseException(Exception):
@@ -481,6 +476,33 @@ class NoFilenameProvided(BaseException):
     """No filename provided"""
 
     pass
+
+
+def validation_exception_handler(request, exc: RequestValidationError):
+    details = exc.errors()
+    modified_details = {}
+    for error in details:
+        field_name = error["loc"][-1]  # Get last element (field name)
+        modified_details[field_name] = error["msg"]
+
+    return JSONResponse(
+        status_code=422,
+        content={
+            "status": "failure",
+            "message": "Validation error",
+            "errors": modified_details,
+        },
+    )
+
+
+def internal_server_error_handler(request, exc: Exception):
+
+    logging.error(f"Unhandled exception: {exc}", exc_info=True)
+
+    return JSONResponse(
+        status_code=500,
+        content={"status": "failure", "message": "Internal server error"},
+    )
 
 
 def create_exception_handler(

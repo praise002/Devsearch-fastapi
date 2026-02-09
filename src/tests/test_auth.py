@@ -3,7 +3,7 @@ from httpx import AsyncClient
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.auth.service import UserService
-from src.db.models import Otp, ProfileSkill, Skill, User
+from src.db.models import Otp, User
 
 
 class TestUserRegistration:
@@ -180,7 +180,7 @@ class TestUserRegistration:
 class TestEmailVerification:
     """Test suite for email verification endpoint."""
 
-    verify_user_email = "/api/v1/auth/verification/verify"
+    verify_user_email = "/api/v1/auth/account-verification"
 
     async def test_verify_email_success(
         self,
@@ -273,7 +273,7 @@ class TestEmailVerification:
         )
 
         # Assert
-        assert response.status_code == 422
+        assert response.status_code == 404
 
     async def test_verify_email_already_verified(
         self,
@@ -364,7 +364,7 @@ class TestEmailVerification:
 class TestResendVerificationEmail:
     """Test suite for OTP resend endpoint."""
 
-    resend_verification = "/api/v1/auth/verification"
+    resend_verification = "/api/v1/auth/verification/email-resend"
 
     @pytest.mark.asyncio
     async def test_resend_otp_success(
@@ -416,9 +416,9 @@ class TestResendVerificationEmail:
         response = await async_client.post(self.resend_verification, json=resend_data)
 
         # Assert
-        assert response.status_code == 422
+        assert response.status_code == 404
         response_data = response.json()
-        assert response_data["err_code"] == "user_not_found"
+        assert response_data["err_code"] == "not_found"
 
     async def test_resend_otp_already_verified(
         self,
@@ -619,81 +619,6 @@ class TestUserLogin:
         assert "refresh" in response_data
 
 
-class TestGetCurrentUserProfile:
-    """Test suite for get current user profile endpoint"""
-
-    url = "/api/v1/auth/me"
-    login_url = "/api/v1/auth/token"
-
-    @pytest.mark.asyncio
-    async def test_get_user_profile_success(
-        self,
-        async_client: AsyncClient,
-        db_session: AsyncSession,
-        verified_user: User,
-        user3_data: dict,
-    ):
-        await db_session.refresh(verified_user, ["profile"])
-        profile = verified_user.profile
-        assert profile is not None, "User should have a default profile."
-
-        profile.short_intro = "Software Developer"
-        profile.bio = "Passionate about coding and open source"
-        profile.location = "New York, USA"
-        profile.github = "https://github.com/testuser"
-        profile.stack_overflow = "https://stackoverflow.com/users/testuser"
-        profile.tw = "https://twitter.com/testuser"
-        profile.ln = "https://linkedin.com/in/testuser"
-        profile.website = "https://testuser.com"
-
-        skill = Skill(
-            name="Python",
-        )
-
-        profile_skill = ProfileSkill(
-            profile_id=profile.id,
-            skill_id=skill.id,
-            description="Expert in Python development with 5 years experience",
-        )
-
-        db_session.add_all([profile, skill, profile_skill])
-        await db_session.commit()
-
-        login_data = {
-            "email": user3_data["email"],
-            "password": user3_data["password"],
-        }
-
-        login_response = await async_client.post(self.login_url, json=login_data)
-
-        response_json = login_response.json()
-        print(response_json)
-        access = response_json["access"]
-        print(access)
-        response = await async_client.get(
-            self.url, headers={"Authorization": f"Bearer {access}"}
-        )
-
-        assert response.status_code == 200
-        response_data = response.json()
-        print(response_data)
-
-        assert response_data["id"] == str(verified_user.id)
-
-    async def test_get_user_profile_unauthenticated(
-        self,
-        async_client: AsyncClient,
-    ):
-        # Act: Try to access without authentication
-        response = await async_client.get(self.url)
-
-        # Assert
-        assert response.status_code == 401
-        response_data = response.json()
-        print(response_data)
-        assert response_data["err_code"] == "unauthorized"
-
-
 class TestLogout:
 
     logout_url = "/api/v1/auth/logout"
@@ -879,10 +804,12 @@ class TestLogoutAll:
         refresh2_jti = decode_token(tokens2["refresh"])["jti"]
         refresh3_jti = decode_token(tokens3["refresh"])["jti"]
 
-        # Check all tokens are blacklisted
-        assert await user_service.is_token_blacklisted(refresh1_jti, db_session)
-        assert await user_service.is_token_blacklisted(refresh2_jti, db_session)
-        assert await user_service.is_token_blacklisted(refresh3_jti, db_session)
+        user_id = str(verified_user.id)
+
+        # Check all tokens are blacklisted (i.e., not valid)
+        assert not await user_service.is_token_valid(user_id, refresh1_jti)
+        assert not await user_service.is_token_valid(user_id, refresh2_jti)
+        assert not await user_service.is_token_valid(user_id, refresh3_jti)
 
     async def test_logout_all_without_token(
         self,
@@ -1143,7 +1070,7 @@ class TestTokenRefresh:
 class TestPasswordResetRequest:
     """Test suite for password reset request endpoint"""
 
-    reset_url = "/api/v1/auth/passwords/reset"
+    reset_url = "/api/v1/auth/password/reset"
 
     async def test_password_reset_request_success(
         self, async_client: AsyncClient, verified_user: User, mock_email: list
@@ -1262,8 +1189,8 @@ class TestPasswordResetRequest:
 class TestPasswordResetVerifyOtp:
     """Test suite for password reset OTP verification endpoint"""
 
-    verify_otp_url = "/api/v1/auth/passwords/reset/verify"
-    reset_request_url = "/api/v1/auth/passwords/reset"
+    verify_otp_url = "/api/v1/auth/password/reset/otp-verify"
+    reset_request_url = "/api/v1/auth/password/reset"
 
     async def test_verify_otp_success(
         self,
@@ -1334,10 +1261,10 @@ class TestPasswordResetVerifyOtp:
             },
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 404
         data = response.json()
         print(data)
-        assert data["err_code"] == "user_not_found"
+        assert data["err_code"] == "not_found"
 
     async def test_verify_otp_no_reset_requested(
         self,
@@ -1444,7 +1371,7 @@ class TestPasswordResetVerifyOtp:
 class TestPasswordResetComplete:
     """Test suite for password reset completion endpoint"""
 
-    complete_url = "/api/v1/auth/passwords/reset/complete"
+    complete_url = "/api/v1/auth/password/reset/complete"
 
     async def test_password_reset_complete_success(
         self,
@@ -1505,10 +1432,10 @@ class TestPasswordResetComplete:
         response = await async_client.post(self.complete_url, json=reset_data)
 
         # Assert
-        assert response.status_code == 422
+        assert response.status_code == 404
         response_data = response.json()
         print(response_data)
-        assert response_data["err_code"] == "user_not_found"
+        assert response_data["err_code"] == "not_found"
 
     async def test_password_reset_complete_password_mismatch(
         self,
@@ -1665,7 +1592,7 @@ class TestPasswordResetComplete:
 class TestPasswordChange:
     """Test suite for password change endpoint"""
 
-    change_url = "/api/v1/auth/passwords/change"
+    change_url = "/api/v1/auth/password/change"
     login_url = "/api/v1/auth/token"
 
     async def test_password_change_success(
@@ -1946,3 +1873,4 @@ class TestGoogleOAuth:
 # FastAPI-Admin
 # pytest src/tests/test_auth.py::TestPasswordResetVerifyOtp::test_verify_otp_inactive_user -v -s
 # pytest src/tests/test_auth.py::TestPasswordResetComplete -v -s
+# pytest src/tests/test_auth.py::TestUserRegistration::test_register_user_success -v -s

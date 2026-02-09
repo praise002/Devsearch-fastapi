@@ -4,8 +4,8 @@ from typing import AsyncGenerator
 
 import jwt
 import pytest
+from fakeredis import FakeAsyncRedis
 from httpx import ASGITransport, AsyncClient
-from pytest_asyncio import is_async_test
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 from sqlmodel import SQLModel
@@ -15,14 +15,58 @@ from src import app
 from src.auth.schemas import UserCreate
 from src.config import Config
 from src.db.main import get_session
+from src.db.models import Profile, ProfileSkill, Skill
+from src.profiles.service import ProfileService
 
 
-# def pytest_collection_modifyitems(items):
-#     """Apply session scope to all async tests"""
-#     pytest_asyncio_tests = (item for item in items if is_async_test(item))
-#     session_scope_marker = pytest.mark.asyncio(loop_scope="session")
-#     for async_test in pytest_asyncio_tests:
-#         async_test.add_marker(session_scope_marker, append=False)
+@pytest.fixture(scope="session")
+async def redis_client():
+    """
+    Provides a fake Redis client for testing.
+    """
+    fake_redis = FakeAsyncRedis(decode_responses=True)
+    yield fake_redis
+    await fake_redis.aclose()
+
+
+@pytest.fixture(autouse=True)
+async def mock_redis(monkeypatch, redis_client):
+    """
+    Automatically mocks Redis for all tests.
+    autouse=True means this runs for every test without needing to specify it.
+    """
+    # Mock the token_blocklist that's created at module level
+    from src.db import redis
+
+    monkeypatch.setattr(redis, "token_blocklist", redis_client)
+
+    yield
+
+    # Clear Redis after each test for isolation
+    await redis_client.flushall()
+
+
+# Create async engine
+engine = create_async_engine(
+    Config.DATABASE_URL,
+    echo=False,  # Set to True to see SQL queries in development
+    future=True,
+)
+
+# Create async session maker
+SessionLocal = async_sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
+
+async def get_db():
+    """
+    Dependency function that yields database sessions.
+    """
+    async with SessionLocal() as session:
+        yield session
 
 
 @pytest.fixture(scope="session")
@@ -41,11 +85,11 @@ def postgresql_proc_config():
     Configure how pytest-postgresql starts the PostgreSQL process.
     """
     return {
-        "port": None,  # 5433
+        "port": None,  # Random port
         "host": "localhost",
         "user": "postgres",
         "password": "",
-        "options": "-c fsync=off",  # Faster for testing (disables some safety checks)
+        "options": "-c fsync=off",  # Faster for testing
     }
 
 
@@ -74,14 +118,92 @@ async def database_url(postgresql_proc):
     if not database_exists(sync_url):
         create_database(sync_url)
 
-    # Construct and return async URL for the engine
+    # Construct and return async URL for the engine (using psycopg instead of asyncpg)
     async_url = (
-        f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{dbname}"
+        f"postgresql+psycopg://{user}:{password}@{host}:{port}/{dbname}"
         if password
-        else f"postgresql+asyncpg://{user}@{host}:{port}/{dbname}"
+        else f"postgresql+psycopg://{user}@{host}:{port}/{dbname}"
     )
 
     return async_url
+
+
+@pytest.fixture(scope="session")
+async def test_engine(database_url):
+    """
+    Creates async SQLAlchemy engine connected to temporary database.
+
+    Args:
+        database_url: URL from database_url fixture
+
+    Returns:
+        AsyncEngine: SQLAlchemy async engine
+    """
+    # Create async engine
+    engine = create_async_engine(
+        database_url,
+        echo=False,  # Set to True to see SQL queries
+        poolclass=NullPool,  # Don't pool connections in tests
+        future=True,
+    )
+
+    yield engine
+
+    # Dispose engine
+    await engine.dispose()
+
+
+@pytest.fixture
+async def database(test_engine) -> AsyncGenerator[AsyncSession, None]:
+    """
+    Creates a fresh database with clean tables for each test.
+    """
+    # Drop and recreate all tables before each test
+    async with test_engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.drop_all)
+        await conn.run_sync(SQLModel.metadata.create_all)
+
+    # Create session
+    async_session_maker = async_sessionmaker(
+        bind=test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    async with async_session_maker() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
+
+
+@pytest.fixture
+async def client(database: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+    """
+    Creates an async HTTP client for testing API endpoints.
+
+    Args:
+        database: Database session from database fixture
+
+    Yields:
+        AsyncClient: HTTP client for making requests
+    """
+
+    # Override the database dependency
+    async def override_get_db():
+        yield database
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    # Create async client
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test/api/v6",
+    ) as client:
+        yield client
+
+    # Clean up
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture(scope="session")
@@ -428,3 +550,139 @@ def expired_access_token():
     )
 
     return expired_token
+
+
+@pytest.fixture
+async def profile_service():
+    """Returns ProfileService instance"""
+    return ProfileService()
+
+
+@pytest.fixture
+async def verified_user_with_profile(verified_user, db_session: AsyncSession):
+    """
+    Returns verified user with their profile.
+    Profile is automatically created via relationship.
+    """
+    # The profile should already exist due to the relationship
+    # But let's ensure it's loaded
+    from sqlmodel import select
+
+    statement = select(Profile).where(Profile.user_id == verified_user.id)
+    result = await db_session.exec(statement)
+    profile = result.first()
+
+    return {"user": verified_user, "profile": profile}
+
+
+@pytest.fixture
+async def another_verified_user_with_profile(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    another_user_data: dict,
+):
+    """
+    Creates a second verified user for testing interactions between users.
+    """
+    from src.auth.schemas import UserCreate
+    from src.auth.service import UserService
+
+    user_service = UserService()
+    user_create = UserCreate(**another_user_data)
+    user = await user_service.create_user(user_create, db_session)
+    await user_service.update_user(user, {"is_email_verified": True}, db_session)
+
+    # Get profile
+    from sqlmodel import select
+
+    statement = select(Profile).where(Profile.user_id == user.id)
+    result = await db_session.exec(statement)
+    profile = result.first()
+
+    return {"user": user, "profile": profile}
+
+
+@pytest.fixture
+async def sample_skills(db_session: AsyncSession):
+    """
+    Creates sample skills in the database.
+    """
+    skills_data = [
+        {"name": "Python"},
+        {"name": "JavaScript"},
+        {"name": "React"},
+        {"name": "Django"},
+        {"name": "PostgreSQL"},
+    ]
+
+    skills = []
+    for skill_data in skills_data:
+        skill = Skill(**skill_data)
+        db_session.add(skill)
+        skills.append(skill)
+
+    await db_session.commit()
+
+    return skills
+
+
+@pytest.fixture
+async def profile_with_skills(
+    verified_user_with_profile,
+    sample_skills,
+    db_session: AsyncSession,
+):
+    """
+    Creates a profile with multiple skills.
+    """
+    profile = verified_user_with_profile["profile"]
+
+    # Add first 3 skills to the profile
+    for i in range(3):
+        profile_skill = ProfileSkill(
+            profile_id=profile.id,
+            skill_id=sample_skills[i].id,
+            description=f"Expert in {sample_skills[i].name}",
+        )
+        db_session.add(profile_skill)
+
+    await db_session.commit()
+
+    return {"profile": profile, "user": verified_user_with_profile["user"]}
+
+
+@pytest.fixture
+def mock_cloudinary(monkeypatch):
+    """
+    Mocks Cloudinary upload and delete operations.
+    """
+
+    upload_result = {
+        "url": "https://res.cloudinary.com/test/image/upload/v123/test_avatar.jpg",
+        "public_id": "test_avatar",
+    }
+
+    async def fake_upload_image(file, public_id=None, folder=None, overwrite=False):
+        return upload_result
+
+    async def fake_delete_image(public_id):
+        return {"result": "ok"}
+
+    def fake_extract_public_id(url):
+        return "test_avatar"
+
+    from src import cloudinary_service
+
+    monkeypatch.setattr(
+        cloudinary_service.CloudinaryService, "upload_image", fake_upload_image
+    )
+    monkeypatch.setattr(
+        cloudinary_service.CloudinaryService, "delete_image", fake_delete_image
+    )
+    monkeypatch.setattr(
+        cloudinary_service.CloudinaryService,
+        "extract_public_id_from_url",
+        fake_extract_public_id,
+    )
+
+    return upload_result
