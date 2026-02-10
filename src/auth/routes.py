@@ -1,5 +1,4 @@
 import logging
-from datetime import datetime
 
 from decouple import config
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
@@ -227,7 +226,7 @@ async def login_user(
             },
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
-        
+
     if not user.is_active:
         raise UserNotActive()
 

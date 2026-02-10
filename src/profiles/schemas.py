@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl, field_validator
 
 from src.auth.schemas import SUCCESS_EXAMPLE
 
@@ -103,7 +103,7 @@ class ProfileListResult(BaseModel):
     full_name: str
     short_intro: str | None = None
     location: str | None = None
-    avatar_url: str | None = None
+    avatar_url: HttpUrl | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -124,5 +124,4 @@ class ProfileListResponse(BaseModel):
 class AvatarUploadResponse(BaseModel):
     status: str = SUCCESS_EXAMPLE
     message: str
-    avatar_url: str
-    avatar_url: str
+    avatar_url: HttpUrl

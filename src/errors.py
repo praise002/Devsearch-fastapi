@@ -286,8 +286,8 @@ def register_all_errors(app: FastAPI):
     )
 
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
-
-    app.add_exception_handler(RequestValidationError, internal_server_error_handler)
+    
+    app.add_exception_handler(Exception, internal_server_error_handler)
 
 
 class BaseException(Exception):

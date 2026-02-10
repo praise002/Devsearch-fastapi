@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 from src.constants import VoteType
 
@@ -29,23 +29,23 @@ class ProjectCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: str
     featured_image: str | None = None
-    source_link: str | None = Field(default=None, max_length=200)
-    demo_link: str | None = Field(default=None, max_length=200)
+    source_link: HttpUrl | None = Field(default=None, max_length=200)
+    demo_link: HttpUrl | None = Field(default=None, max_length=200)
 
 
 class ProjectUpdate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: str | None = None
-    featured_image: str | None = None
-    source_link: str = Field(default=None, max_length=200)
-    demo_link: str = Field(default=None, max_length=200)
+    featured_image: HttpUrl | None = None
+    source_link: HttpUrl = Field(default=None, max_length=200)
+    demo_link: HttpUrl = Field(default=None, max_length=200)
 
 
 class ProjectOwnerInfo(BaseModel):
     user_id: str
     username: str
     full_name: str
-    avatar_url: str | None = None
+    avatar_url: HttpUrl | None = None
 
 
 class ProjectResponseData(BaseModel):
@@ -53,9 +53,9 @@ class ProjectResponseData(BaseModel):
     title: str
     slug: str
     description: str
-    featured_image: str
-    source_link: str | None = None
-    demo_link: str | None = None
+    featured_image: HttpUrl
+    source_link: HttpUrl | None = None
+    demo_link: HttpUrl | None = None
     vote_total: int
     vote_ratio: int
     created_at: datetime
@@ -78,7 +78,7 @@ class ProjectListResponseData(BaseModel):
     title: str
     slug: str
     description: str
-    featured_image: str
+    featured_image: HttpUrl
     vote_total: int
     vote_ratio: int
     owner: ProjectOwnerInfo

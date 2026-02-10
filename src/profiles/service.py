@@ -30,7 +30,7 @@ class ProfileService:
                     Profile.location.ilike(pattern),  # Search location
                 )
             )
-            
+
         # Get total count (without limit/offset)
         count_query = select(func.count()).select_from(statement.subquery())
         count_result = await session.exec(count_query)
@@ -47,7 +47,9 @@ class ProfileService:
         """
         Get a profile by username
         """
-        user_statement = select(User).where(User.username == username)
+        # user_statement = select(User).where(User.username == username.lower())
+        user_statement = select(User).where(User.username.ilike(username))
+
         user_result = await session.exec(user_statement)
         user = user_result.first()
 

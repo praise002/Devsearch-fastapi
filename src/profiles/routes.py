@@ -20,7 +20,6 @@ from src.profiles.schema_examples import (
     GET_USER_SKILLS_RESPONSES,
     UPDATE_PROFILE_RESPONSES,
     UPDATE_SKILL_RESPONSES,
-    UPDATE_USER_PROFILE_RESPONSES,
     UPLOAD_AVATAR_RESPONSES,
 )
 from src.profiles.schemas import (
@@ -44,6 +43,32 @@ router = APIRouter()
 
 profile_service = ProfileService()
 cloudinary_service = CloudinaryService()
+
+
+def profile_response(message, profile_with_user, skills_response):
+    return ProfileResponse(
+        status=SUCCESS_EXAMPLE,
+        message=message,
+        data=ProfileData(
+            # User fields
+            id=str(profile_with_user.user_id),
+            email=profile_with_user.user.email,
+            first_name=profile_with_user.user.first_name,
+            last_name=profile_with_user.user.last_name,
+            username=profile_with_user.user.username,
+            # Profile fields
+            short_intro=profile_with_user.short_intro,
+            bio=profile_with_user.bio,
+            location=profile_with_user.location,
+            avatar_url=profile_with_user.avatar_url,
+            github=profile_with_user.github,
+            stack_overflow=profile_with_user.stack_overflow,
+            tw=profile_with_user.tw,
+            ln=profile_with_user.ln,
+            website=profile_with_user.website,
+            skills=skills_response,
+        ),
+    )
 
 
 @router.get(
@@ -158,28 +183,7 @@ async def get_my_profile(
                     )
                 )
 
-    return ProfileResponse(
-        status="success",
-        message="Profile retrieved successfully",
-        data=ProfileData(
-            # User fields
-            id=str(user.id),
-            email=user.email,
-            first_name=user.first_name,
-            last_name=user.last_name,
-            username=user.username,
-            # Profile fields
-            short_intro=profile.short_intro,
-            bio=profile.bio,
-            location=profile.location,
-            github=profile.github,
-            stack_overflow=profile.stack_overflow,
-            tw=profile.tw,
-            ln=profile.ln,
-            website=profile.website,
-            skills=skills_response,
-        ),
-    )
+    return profile_response("Profile retrieved successfully", user, skills_response)
 
 
 @router.patch(
@@ -202,11 +206,31 @@ async def update_my_profile(
         profile, update_data, session
     )
 
-    return {
-        "status": SUCCESS_EXAMPLE,
-        "message": "Profile updated successfully",
-        "data": updated_profile,
-    }
+    # Refresh the profile with user relationship loaded
+    statement = (
+        select(Profile)
+        .options(selectinload(Profile.user))
+        .options(selectinload(Profile.skills))
+        .where(Profile.id == updated_profile.id)
+    )
+    result = await session.exec(statement)
+    profile_with_user = result.first()
+
+    skills_response = []
+    if profile_with_user.skills:
+        for profile_skill in profile_with_user.skills:
+            if profile_skill.skill:
+                skills_response.append(
+                    SkillDataResponse(
+                        id=str(profile_skill.skill.id),
+                        name=profile_skill.skill.name,
+                        description=profile_skill.description,
+                    )
+                )
+
+    return profile_response(
+        "Profile updated successfully", profile_with_user, skills_response
+    )
 
 
 @router.post(
@@ -291,42 +315,38 @@ async def get_user_profile(
     """
     profile = await profile_service.get_profile_by_username(username, session)
 
-    if not profile:  # sanme as if profile is None
+    if not profile:  # same as if profile is None
         raise NotFound("Profile for user '{username}' not found")
 
-    return {
-        "status": SUCCESS_EXAMPLE,
-        "message": "Profile retrieved successfully",
-        "data": profile,
-    }
-
-
-@router.patch(
-    "/me",
-    responses=UPDATE_USER_PROFILE_RESPONSES,
-    response_model=ProfileResponse,
-)
-async def update_my_profile(
-    profile_data: ProfileUpdate,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    """
-    Update a user's profile
-    """
-
-    profile = await profile_service.get_profile_by_id(current_user.id, session)
-
-    update_data = profile_data.model_dump(exclude_unset=True)
-    updated_profile = await profile_service.update_profile(
-        profile, update_data, session
+    statement = (
+        select(User)
+        .options(
+            selectinload(User.profile)
+            .selectinload(Profile.skills)
+            .selectinload(ProfileSkill.skill)
+        )
+        .where(User.id == profile.user_id)
     )
 
-    return {
-        "status": SUCCESS_EXAMPLE,
-        "message": "Profile updated successfully",
-        "data": updated_profile,
-    }
+    result = await session.exec(statement)
+    user = result.first()
+
+    profile = user.profile
+
+    skills_response = []
+
+    if profile.skills:
+        for profile_skill in profile.skills:
+            if profile_skill.skill:
+                skills_response.append(
+                    SkillDataResponse(
+                        id=str(profile_skill.skill.id),
+                        name=profile_skill.skill.name,
+                        description=profile_skill.description,
+                    )
+                )
+
+    return profile_response("Profile retrieved successfully", profile, skills_response)
 
 
 @router.post(
