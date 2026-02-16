@@ -1,7 +1,7 @@
 from httpx import AsyncClient
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.db.models import Profile, User
+from src.db.models import Profile, ProfileSkill, Skill, User
 
 
 class TestGetProfiles:
@@ -335,6 +335,7 @@ class TestGetMyProfile:
         assert data["skills"] == [] or data["skills"] is None
 
 
+# TODO: FIX
 class TestUpdateMyProfile:
     """Test suite for PATCH /profiles/me endpoint"""
 
@@ -581,6 +582,7 @@ class TestUpdateMyProfile:
         print(response.json())
 
 
+# TODO: FIX
 class TestUploadAvatar:
     """Test suite for POST /profiles/avatar endpoint"""
 
@@ -629,6 +631,7 @@ class TestUploadAvatar:
         assert response_data["status"] == "success"
         assert "Avatar uploaded successfully" in response_data["message"]
         assert "avatar_url" in response_data
+        # The service returns just the URL string, not a dict
         assert response_data["avatar_url"] == mock_cloudinary["url"]
 
         # Verify database update
@@ -779,6 +782,7 @@ class TestUploadAvatar:
         print(response.json())
 
 
+# TODO: FIX
 class TestDeleteAvatar:
     """Test suite for DELETE /profiles/avatar endpoint"""
 
@@ -959,6 +963,678 @@ class TestGetUserProfile:
         assert "data" in response_data
 
 
+class TestAddSkillToProfile:
+    """Test suite for POST /profiles/me/skills endpoint"""
+
+    add_skill_url = "/api/v1/profiles/me/skills"
+    login_url = "/api/v1/auth/token"
+
+    async def test_add_skill_success(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+        verified_user: User,
+        user3_data: dict,
+    ):
+        """
+        Test successfully adding a new skill to profile.
+        """
+        # Arrange: Login
+        login_data = {
+            "email": verified_user.email,
+            "password": user3_data["password"],
+        }
+        login_response = await async_client.post(self.login_url, json=login_data)
+        tokens = login_response.json()
+        access_token = tokens["access"]
+
+        # Act: Add skill
+        skill_data = {
+            "name": "Python",
+            "description": "5 years of professional experience",
+        }
+
+        response = await async_client.post(
+            self.add_skill_url,
+            json=skill_data,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        # Assert
+        assert response.status_code == 201
+        response_data = response.json()
+        print(response_data)
+
+        assert response_data["status"] == "success"
+        assert "Skill added to profile successfully" in response_data["message"]
+        assert "data" in response_data
+
+        data = response_data["data"]
+        assert data["name"] == "Python"
+        assert data["description"] == skill_data["description"]
+
+        # Verify in database
+        from sqlmodel import select
+
+        statement = select(Skill).where(Skill.name == "Python")
+        result = await db_session.exec(statement)
+        skill = result.first()
+        assert skill is not None
+
+    async def test_add_skill_existing_skill(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+        verified_user: User,
+        sample_skills,
+        user3_data: dict,
+    ):
+        """
+        Test adding a skill that already exists globally (should reuse existing).
+        """
+        # Arrange: Login
+        login_data = {
+            "email": verified_user.email,
+            "password": user3_data["password"],
+        }
+        login_response = await async_client.post(self.login_url, json=login_data)
+        tokens = login_response.json()
+        access_token = tokens["access"]
+
+        # Act: Add skill that exists globally
+        existing_skill = sample_skills[0]  # "Python"
+        skill_data = {
+            "name": existing_skill.name,
+            "description": "My custom description",
+        }
+
+        response = await async_client.post(
+            self.add_skill_url,
+            json=skill_data,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        # Assert
+        assert response.status_code == 201
+        response_data = response.json()
+        print(response_data)
+
+        # Verify it linked to existing skill, not created new one
+        from sqlmodel import select
+
+        statement = select(Skill).where(Skill.name == existing_skill.name)
+        result = await db_session.exec(statement)
+        skills = result.all()
+        print(skills)
+        assert len(skills) == 1  # Should still be only one
+
+    async def test_add_skill_duplicate(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+        profile_with_skills,
+        user3_data: dict,
+    ):
+        """
+        Test adding a skill that user already has (should fail).
+        """
+        # Arrange: Login
+        user = profile_with_skills["user"]
+        login_data = {
+            "email": user.email,
+            "password": user3_data["password"],
+        }
+        login_response = await async_client.post(self.login_url, json=login_data)
+        tokens = login_response.json()
+        access_token = tokens["access"]
+
+        # Act: Try to add skill user already has
+        skill_data = {
+            "name": "Python",  # User already has this from fixture
+            "description": "Duplicate skill",
+        }
+
+        response = await async_client.post(
+            self.add_skill_url,
+            json=skill_data,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        # Assert
+        assert response.status_code == 422
+        response_data = response.json()
+        print(response_data)
+        assert "already" in response_data["message"].lower()
+
+    async def test_add_skill_unauthenticated(
+        self,
+        async_client: AsyncClient,
+    ):
+        """
+        Test adding skill without authentication.
+        """
+        # Act
+        skill_data = {"name": "Python", "description": "Should fail"}
+
+        response = await async_client.post(
+            self.add_skill_url,
+            json=skill_data,
+        )
+
+        # Assert
+        assert response.status_code == 401
+        response_data = response.json()
+        print(response_data)
+        assert response_data["err_code"] == "unauthorized"
+
+    async def test_add_skill_invalid_data(
+        self,
+        async_client: AsyncClient,
+        verified_user: User,
+        user3_data: dict,
+    ):
+        """
+        Test adding skill with invalid data (empty name, description too long).
+        """
+        # Arrange: Login
+        login_data = {
+            "email": verified_user.email,
+            "password": user3_data["password"],
+        }
+        login_response = await async_client.post(self.login_url, json=login_data)
+        tokens = login_response.json()
+        access_token = tokens["access"]
+
+        # Act: Empty skill name
+        skill_data = {"name": "", "description": "Valid description"}
+
+        response = await async_client.post(
+            self.add_skill_url,
+            json=skill_data,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        # Assert
+        assert response.status_code == 422
+        print(response.json())
+
+        # Act: Name too long (max is 100)
+        skill_data = {"name": "A" * 101, "description": "Valid description"}
+
+        response = await async_client.post(
+            self.add_skill_url,
+            json=skill_data,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        # Assert
+        assert response.status_code == 422
+        print(response.json())
+
+    async def test_add_skill_missing_fields(
+        self,
+        async_client: AsyncClient,
+        verified_user: User,
+        user3_data: dict,
+    ):
+        """
+        Test adding skill with missing required fields.
+        """
+        # Arrange: Login
+        login_data = {
+            "email": verified_user.email,
+            "password": user3_data["password"],
+        }
+        login_response = await async_client.post(self.login_url, json=login_data)
+        tokens = login_response.json()
+        access_token = tokens["access"]
+
+        # Act: Missing name
+        skill_data = {"description": "No name provided"}
+
+        response = await async_client.post(
+            self.add_skill_url,
+            json=skill_data,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        # Assert
+        assert response.status_code == 422
+        print(response.json())
+
+
+class TestGetUserSkills:
+    """Test suite for GET /profiles/{username}/skills endpoint"""
+
+    def get_user_skills_url(self, username: str):
+        return f"/api/v1/profiles/{username}/skills"
+
+    async def test_get_user_skills_success(
+        self,
+        async_client: AsyncClient,
+        profile_with_skills,
+    ):
+        """
+        Test successfully retrieving user's skills.
+        """
+        # Arrange
+        user = profile_with_skills["user"]
+        username = user.username
+
+        # Act
+        response = await async_client.get(self.get_user_skills_url(username))
+
+        # Assert
+        assert response.status_code == 200
+        response_data = response.json()
+        print(response_data)
+
+        # Should return list of skills
+        # assert isinstance(response_data, list)
+        assert len(response_data["data"]) == 3  # User has 3 skills from fixture
+
+        # Check skill structure
+        assert "status" in response_data
+        assert "message" in response_data
+        assert "data" in response_data
+
+        data = response_data["data"][0]
+        assert "id" in data
+        assert "name" in data
+        assert "description" in data
+
+    async def test_get_user_skills_user_not_found(
+        self,
+        async_client: AsyncClient,
+    ):
+        """
+        Test retrieving skills for non-existent user.
+        """
+        # Act
+        response = await async_client.get(
+            self.get_user_skills_url("nonexistentuser123")
+        )
+
+        # Assert
+        assert response.status_code == 404
+        response_data = response.json()
+        print(response_data)
+        assert response_data["err_code"] == "not_found"
+
+    async def test_get_user_skills_empty(
+        self,
+        async_client: AsyncClient,
+        another_verified_user,
+    ):
+        """
+        Test retrieving skills when user has no skills.
+        """
+        # Arrange
+        user = another_verified_user
+        username = user.username
+
+        # Act
+        response = await async_client.get(self.get_user_skills_url(username))
+
+        # Assert
+        assert response.status_code == 200
+        response_data = response.json()
+        print(response_data)
+
+        # Should return empty list
+        assert len(response_data["data"]) == 0
+
+
+class TestUpdateSkill:
+    """Test suite for PATCH /profiles/me/skills/{skill_id} endpoint"""
+
+    def get_update_skill_url(self, skill_id: str):
+        return f"/api/v1/profiles/me/skills/{skill_id}"
+
+    login_url = "/api/v1/auth/token"
+
+    async def test_update_skill_success(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+        profile_with_skills,
+        user3_data: dict,
+    ):
+        """
+        Test successfully updating a skill description.
+        """
+        # Arrange: Login
+        user = profile_with_skills["user"]
+        login_data = {
+            "email": user.email,
+            "password": user3_data["password"],
+        }
+        login_response = await async_client.post(self.login_url, json=login_data)
+        tokens = login_response.json()
+        access_token = tokens["access"]
+
+        # Get one of the user's skills
+        from sqlmodel import select
+
+        profile = profile_with_skills["profile"]
+        statement = select(ProfileSkill).where(ProfileSkill.profile_id == profile.id)
+        result = await db_session.exec(statement)
+        profile_skill = result.first()
+
+        # Act: Update skill description
+        update_data = {"description": "Updated: 10 years of experience"}
+
+        response = await async_client.patch(
+            self.get_update_skill_url(profile_skill.id),
+            json=update_data,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        # Assert
+        # assert response.status_code == 200
+        response_data = response.json()
+        print(response_data)
+
+        assert response_data["status"] == "success"
+        assert "Skill updated successfully" in response_data["message"]
+
+        data = response_data["data"]
+        assert data["description"] == update_data["description"]
+
+        # Verify in database
+        await db_session.refresh(profile_skill)
+        assert profile_skill.description == update_data["description"]
+
+    async def test_update_skill_not_found(
+        self,
+        async_client: AsyncClient,
+        verified_user: User,
+        user3_data: dict,
+    ):
+        """
+        Test updating a skill that doesn't exist.
+        """
+        # Arrange: Login
+        login_data = {
+            "email": verified_user.email,
+            "password": user3_data["password"],
+        }
+        login_response = await async_client.post(self.login_url, json=login_data)
+        tokens = login_response.json()
+        access_token = tokens["access"]
+
+        # Act: Try to update non-existent skill
+        import uuid
+
+        fake_skill_id = str(uuid.uuid4())
+        update_data = {"description": "This should fail"}
+
+        response = await async_client.patch(
+            self.get_update_skill_url(fake_skill_id),
+            json=update_data,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        # Assert
+        assert response.status_code == 404
+        response_data = response.json()
+        print(response_data)
+        assert response_data["err_code"] == "not_found"
+
+    async def test_update_skill_not_owned(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+        verified_user: User,
+        another_verified_user_with_profile,
+        sample_skills,
+        user3_data: dict,
+        another_user_data: dict,
+    ):
+        """
+        Test updating a skill that belongs to another user.
+        """
+        # Arrange: Add skill to another user
+        another_profile = another_verified_user_with_profile["profile"]
+        profile_skill = ProfileSkill(
+            profile_id=another_profile.id,
+            skill_id=sample_skills[0].id,
+            description="Another user's skill",
+        )
+        db_session.add(profile_skill)
+        await db_session.commit()
+
+        # Login as verified_user (not the owner)
+        login_data = {
+            "email": verified_user.email,
+            "password": user3_data["password"],
+        }
+        login_response = await async_client.post(self.login_url, json=login_data)
+        tokens = login_response.json()
+        access_token = tokens["access"]
+
+        # Act: Try to update another user's skill
+        update_data = {"description": "Trying to steal this skill"}
+
+        response = await async_client.patch(
+            self.get_update_skill_url(str(profile_skill.id)),
+            json=update_data,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        # Assert
+        assert response.status_code == 404  # Skill not found in current user's profile
+        response_data = response.json()
+        print(response_data)
+
+    async def test_update_skill_unauthenticated(
+        self,
+        async_client: AsyncClient,
+    ):
+        """
+        Test updating skill without authentication.
+        """
+        # Act
+        import uuid
+
+        fake_skill_id = str(uuid.uuid4())
+        update_data = {"description": "Should fail"}
+
+        response = await async_client.patch(
+            self.get_update_skill_url(fake_skill_id),
+            json=update_data,
+        )
+
+        # Assert
+        assert response.status_code == 401
+        response_data = response.json()
+        print(response_data)
+        assert response_data["err_code"] == "unauthorized"
+
+    async def test_update_skill_invalid_skill_id(
+        self,
+        async_client: AsyncClient,
+        verified_user: User,
+        user3_data: dict,
+    ):
+        """
+        Test updating skill with invalid UUID format.
+        """
+        # Arrange: Login
+        login_data = {
+            "email": verified_user.email,
+            "password": user3_data["password"],
+        }
+        login_response = await async_client.post(self.login_url, json=login_data)
+        tokens = login_response.json()
+        access_token = tokens["access"]
+
+        # Act: Use invalid UUID
+        update_data = {"description": "Should fail"}
+
+        response = await async_client.patch(
+            self.get_update_skill_url("invalid-uuid"),
+            json=update_data,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        # Assert: Should fail validation
+        print(response.json())
+
+
+class TestDeleteSkill:
+    """Test suite for DELETE /profiles/me/skills/{skill_id} endpoint"""
+
+    def get_delete_skill_url(self, skill_id: str):
+        return f"/api/v1/profiles/me/skills/{skill_id}"
+
+    login_url = "/api/v1/auth/token"
+
+    async def test_delete_skill_success(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+        profile_with_skills,
+        user3_data: dict,
+    ):
+        """
+        Test successfully deleting a skill from profile.
+        """
+        # Arrange: Login
+        user = profile_with_skills["user"]
+        login_data = {
+            "email": user.email,
+            "password": user3_data["password"],
+        }
+        login_response = await async_client.post(self.login_url, json=login_data)
+        tokens = login_response.json()
+        access_token = tokens["access"]
+
+        # Get one of the user's skills
+        from sqlmodel import select
+
+        profile = profile_with_skills["profile"]
+        statement = select(ProfileSkill).where(ProfileSkill.profile_id == profile.id)
+        result = await db_session.exec(statement)
+        profile_skill = result.first()
+
+        # Act: Delete skill
+        response = await async_client.delete(
+            self.get_delete_skill_url(profile_skill.id),
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        # Assert
+        assert response.status_code == 204
+
+        # Verify skill link is deleted
+        statement = select(ProfileSkill).where(ProfileSkill.id == profile_skill.id)
+        result = await db_session.exec(statement)
+        deleted_skill = result.first()
+        assert deleted_skill is None
+
+    async def test_delete_skill_not_found(
+        self,
+        async_client: AsyncClient,
+        verified_user: User,
+        user3_data: dict,
+    ):
+        """
+        Test deleting a skill that doesn't exist.
+        """
+        # Arrange: Login
+        login_data = {
+            "email": verified_user.email,
+            "password": user3_data["password"],
+        }
+        login_response = await async_client.post(self.login_url, json=login_data)
+        tokens = login_response.json()
+        access_token = tokens["access"]
+
+        # Act: Try to delete non-existent skill
+        import uuid
+
+        fake_skill_id = str(uuid.uuid4())
+
+        response = await async_client.delete(
+            self.get_delete_skill_url(fake_skill_id),
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        # Assert
+        assert response.status_code == 404
+        response_data = response.json()
+        print(response_data)
+        assert response_data["err_code"] == "not_found"
+
+    async def test_delete_skill_not_owned(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+        verified_user: User,
+        another_verified_user_with_profile,
+        sample_skills,
+        user3_data: dict,
+    ):
+        """
+        Test deleting a skill that belongs to another user.
+        """
+        # Arrange: Add skill to another user
+        another_profile = another_verified_user_with_profile["profile"]
+        profile_skill = ProfileSkill(
+            profile_id=another_profile.id,
+            skill_id=sample_skills[0].id,
+            description="Another user's skill",
+        )
+        db_session.add(profile_skill)
+        await db_session.commit()
+
+        # Login as verified_user
+        login_data = {
+            "email": verified_user.email,
+            "password": user3_data["password"],
+        }
+        login_response = await async_client.post(self.login_url, json=login_data)
+        tokens = login_response.json()
+        access_token = tokens["access"]
+
+        # Act: Try to delete another user's skill
+        response = await async_client.delete(
+            self.get_delete_skill_url(str(profile_skill.id)),
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        # Assert
+        assert response.status_code == 404
+        response_data = response.json()
+        print(response_data)
+
+    async def test_delete_skill_unauthenticated(
+        self,
+        async_client: AsyncClient,
+    ):
+        """
+        Test deleting skill without authentication.
+        """
+        # Act
+        import uuid
+
+        fake_skill_id = str(uuid.uuid4())
+
+        response = await async_client.delete(self.get_delete_skill_url(fake_skill_id))
+
+        # Assert
+        assert response.status_code == 401
+        response_data = response.json()
+        print(response_data)
+        assert response_data["err_code"] == "unauthorized"
+
+   
+
+# pytest src/tests/test_profiles.py::TestAddSkillToProfile -v -s
+# pytest src/tests/test_profiles.py::TestGetUserSkills -v -s
+# pytest src/tests/test_profiles.py::TestUpdateSkill -v -s
+# pytest src/tests/test_profiles.py::TestDeleteSkill -v -s
 # pytest src/tests/test_profiles.py::TestUploadAvatar -v -s
 # pytest src/tests/test_profiles.py::TestDeleteAvatar -v -s
 

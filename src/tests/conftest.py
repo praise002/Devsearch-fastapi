@@ -461,6 +461,24 @@ async def verified_user(
     await user_service.update_user(user, {"is_email_verified": True}, db_session)
     return user
 
+@pytest.fixture
+async def another_verified_user(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    valid_user_data: dict,
+):
+    """
+    Creates a verified user for testing.
+    """
+    from src.auth.service import UserService
+
+    user_service = UserService()
+    user_create = UserCreate(**valid_user_data)
+    user = await user_service.create_user(user_create, db_session)
+
+    await user_service.update_user(user, {"is_email_verified": True}, db_session)
+    return user
+
 
 @pytest.fixture
 async def inactive_user(
@@ -656,33 +674,29 @@ def mock_cloudinary(monkeypatch):
     """
     Mocks Cloudinary upload and delete operations.
     """
+    upload_result_url = "https://res.cloudinary.com/test/image/upload/v123/test_avatar.jpg"
 
-    upload_result = {
-        "url": "https://res.cloudinary.com/test/image/upload/v123/test_avatar.jpg",
-        "public_id": "test_avatar",
-    }
+    # Wrap in staticmethod to match the original
+    @staticmethod
+    async def fake_upload_image(file, folder="avatars", public_id=None, overwrite=True):
+        """Mock upload"""
+        return upload_result_url
 
-    async def fake_upload_image(file, public_id=None, folder=None, overwrite=False):
-        return upload_result
-
+    @staticmethod
     async def fake_delete_image(public_id):
-        return {"result": "ok"}
+        """Mock delete"""
+        return True
 
+    @staticmethod
     def fake_extract_public_id(url):
+        """Mock extract"""
         return "test_avatar"
 
-    from src import cloudinary_service
+    from src.cloudinary_service import CloudinaryService
 
-    monkeypatch.setattr(
-        cloudinary_service.CloudinaryService, "upload_image", fake_upload_image
-    )
-    monkeypatch.setattr(
-        cloudinary_service.CloudinaryService, "delete_image", fake_delete_image
-    )
-    monkeypatch.setattr(
-        cloudinary_service.CloudinaryService,
-        "extract_public_id_from_url",
-        fake_extract_public_id,
-    )
+    # Set the static methods directly
+    monkeypatch.setattr(CloudinaryService, "upload_image", fake_upload_image)
+    monkeypatch.setattr(CloudinaryService, "delete_image", fake_delete_image)
+    monkeypatch.setattr(CloudinaryService, "extract_public_id_from_url", fake_extract_public_id)
 
-    return upload_result
+    return {"url": upload_result_url, "public_id": "test_avatar"}

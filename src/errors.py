@@ -220,7 +220,7 @@ def register_all_errors(app: FastAPI):
             initial_detail={
                 "status": "failure",
                 "message": "The request could not be processed due to validation errors",
-                "err_code": "unprocessable_entity",
+                "err_code": "no_filename_provided",
             },
         ),
     )
@@ -232,7 +232,7 @@ def register_all_errors(app: FastAPI):
             initial_detail={
                 "status": "failure",
                 "message": "No filename provided",
-                "err_code": "no_filename_provided",
+                "err_code": "unprocessable_entity",
             },
         ),
     )
@@ -286,7 +286,7 @@ def register_all_errors(app: FastAPI):
     )
 
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
-    
+
     app.add_exception_handler(Exception, internal_server_error_handler)
 
 

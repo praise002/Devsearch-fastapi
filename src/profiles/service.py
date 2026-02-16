@@ -118,24 +118,51 @@ class ProfileService:
         await session.refresh(new_skill)
         return new_skill
 
-    async def add_skill_to_profile(
-        self,
-        profile_id: str,
-        skill_name: str,
-        description: Optional[str],
-        session: AsyncSession,
-    ) -> ProfileSkill:
-        """
-        Add a skill to user's profile
-        """
-        skill = await self.get_or_create_skill(skill_name, session)
+    # async def add_skill_to_profile(
+    #     self,
+    #     profile_id: str,
+    #     skill_name: str,
+    #     description: Optional[str],
+    #     session: AsyncSession,
+    # ) -> ProfileSkill:
+    #     """
+    #     Add a skill to user's profile
+    #     """
+    #     skill = await self.get_or_create_skill(skill_name, session)
 
-        existing = await session.exec(
-            select(ProfileSkill).where(
+    #     existing = await session.exec(
+    #         select(ProfileSkill).where(
+    #             ProfileSkill.profile_id == profile_id, ProfileSkill.skill_id == skill.id
+    #         )
+    #     )
+    #     if existing.first():
+    #         raise ValueError("Skill already exists in profile")
+
+    #     profile_skill = ProfileSkill(
+    #         profile_id=profile_id, skill_id=skill.id, description=description
+    #     )
+    #     session.add(profile_skill)
+    #     await session.commit()
+    #     await session.refresh(profile_skill)
+    #     return profile_skill
+
+    async def add_skill_to_profile(
+        self, profile_id: str, skill_name: str, description: str, session: AsyncSession
+    ) -> ProfileSkill:
+        """Add a skill to a profile"""
+
+        skill = await self.get_or_create_skill(skill_name, session)
+        statement = (
+            select(ProfileSkill)
+            .join(Skill)
+            .where(
                 ProfileSkill.profile_id == profile_id, ProfileSkill.skill_id == skill.id
             )
         )
-        if existing.first():
+        result = await session.exec(statement)
+        existing = result.first()
+
+        if existing:
             raise ValueError("Skill already exists in profile")
 
         profile_skill = ProfileSkill(
@@ -143,7 +170,13 @@ class ProfileService:
         )
         session.add(profile_skill)
         await session.commit()
-        await session.refresh(profile_skill)
+
+        # Refresh with eager loading
+        await session.refresh(
+            profile_skill,
+            attribute_names=["skill"],  # Eagerly load the skill relationship
+        )
+
         return profile_skill
 
     async def get_profile_skills(
@@ -159,7 +192,7 @@ class ProfileService:
     ) -> Optional[ProfileSkill]:
         """Get a specific skill from a profile"""
         statement = select(ProfileSkill).where(
-            ProfileSkill.skill_id == skill_id, ProfileSkill.profile_id == profile_id
+            ProfileSkill.id == skill_id, ProfileSkill.profile_id == profile_id
         )
         result = await session.exec(statement)
         return result.first()

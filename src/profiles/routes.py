@@ -1,4 +1,5 @@
 from urllib.parse import urlencode
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, status
 from sqlalchemy.orm import selectinload
@@ -368,7 +369,7 @@ async def add_skill_to_profile(
     - Creates link between johndoe and Python skill
     """
 
-    profile = await profile_service.get_profile_by_id(current_user.id, session)
+    profile = await profile_service.get_profile_by_user_id(current_user.id, session)
 
     try:
         profile_skill = await profile_service.add_skill_to_profile(
@@ -410,23 +411,22 @@ async def get_user_skills(
     """
     profile = await profile_service.get_profile_by_username(username, session)
     if not profile:
-        raise NotFound("Profile for user '{username}' not found")
+        raise NotFound(f"Profile for user '{username}' not found")
 
     skills = await profile_service.get_profile_skills(str(profile.id), session)
 
-    return [
-        SkillResponse(
-            status=SUCCESS_EXAMPLE,
-            message="Skills retrieved successfully",
-            data=SkillData(
+    return SkillListResponse(
+        status=SUCCESS_EXAMPLE,
+        message="Skills retrieved successfully",
+        data=[
+            SkillDataResponse(
                 id=str(skill.id),
                 name=skill.skill.name,
                 description=skill.description,
-                created_at=skill.skill.created_at,
-            ),
-        )
-        for skill in skills
-    ]
+            )
+            for skill in skills
+        ],
+    )
 
 
 @router.patch(
@@ -435,7 +435,7 @@ async def get_user_skills(
     response_model=SkillResponse,
 )
 async def update_skill(
-    skill_id: str,
+    skill_id: UUID,
     skill_data: SkillUpdate,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
@@ -448,7 +448,7 @@ async def update_skill(
     - Updates description of skill 123 in current profile
     """
 
-    profile = await profile_service.get_profile_by_id(current_user.id, session)
+    profile = await profile_service.get_profile_by_user_id(current_user.id, session)
 
     profile_skill = await profile_service.get_profile_skill(
         skill_id=skill_id, profile_id=str(profile.id), session=session
@@ -480,7 +480,7 @@ async def update_skill(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_skill(
-    skill_id: str,
+    skill_id: UUID,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
@@ -496,7 +496,7 @@ async def delete_skill(
     - Removes skill 123 from current profile
     """
 
-    profile = await profile_service.get_profile_by_id(current_user.id, session)
+    profile = await profile_service.get_profile_by_user_id(current_user.id, session)
 
     profile_skill = await profile_service.get_profile_skill(
         skill_id=skill_id, profile_id=str(profile.id), session=session
