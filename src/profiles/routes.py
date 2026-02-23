@@ -184,7 +184,7 @@ async def get_my_profile(
                     )
                 )
 
-    return profile_response("Profile retrieved successfully", user, skills_response)
+    return profile_response("Profile retrieved successfully", profile, skills_response)
 
 
 @router.patch(
@@ -264,7 +264,7 @@ async def upload_avatar(
 
     # Update profile with new avatar URL
     updated_profile = await profile_service.update_avatar(
-        profile, upload_result["url"], session
+        profile, upload_result, session
     )
 
     return AvatarUploadResponse(

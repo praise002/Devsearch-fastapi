@@ -2,6 +2,7 @@ from typing import List, Optional
 
 from slugify import slugify
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 from sqlmodel import col, func, or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -23,7 +24,16 @@ class ProjectService:
         """
         Get list of projects with optional search
         """
-        statement = select(Project).join(Profile).join(User)
+        statement = (
+            select(Project)
+            .options(
+                selectinload(Project.owner).selectinload(Profile.user),
+                selectinload(Project.tags),
+                selectinload(Project.reviews),
+            )
+            .join(Profile)
+            .join(User)
+        )
 
         if search:
             pattern = f"%{search}%"
@@ -45,7 +55,17 @@ class ProjectService:
         """
         Get project by its slug
         """
-        statement = select(Project).where(Project.slug == slug)
+        statement = (
+            select(Project)
+            .where(Project.slug == slug)
+            .options(
+                selectinload(Project.owner).selectinload(Profile.user),
+                selectinload(Project.tags),
+                selectinload(Project.reviews),
+            )
+            .join(Profile)
+            .join(User)
+        )
         result = await session.exec(statement)
         return result.first()
 
@@ -78,7 +98,11 @@ class ProjectService:
                 counter += 1
 
         await session.commit()
-        await session.refresh(new_project)
+        await session.refresh(new_project, attribute_names=["owner", "tags", "reviews"])
+
+        if new_project.owner:
+            await session.refresh(new_project.owner, attribute_names=["user"])
+
         return new_project
 
     async def update_project(
@@ -112,8 +136,18 @@ class ProjectService:
                         counter += 1
 
         await session.commit()
-        await session.refresh(project)
-        return project
+        await session.refresh(project, attribute_names=["owner", "tags", "reviews"])
+
+        if project.owner:
+            await session.refresh(project.owner, attribute_names=["user"])
+
+        for review in project.reviews:
+            await session.refresh(review, attribute_names=["profile"])
+            if review.profile:
+                await session.refresh(review.profile, attribute_names=["user"])
+
+        # return project
+        return await self.get_project_by_slug(project.slug, session)
 
     async def delete_project(self, project: Project, session: AsyncSession) -> None:
         """
@@ -381,4 +415,5 @@ class ProjectService:
         )
 
         result = await session.exec(statement)
+        return result.all()
         return result.all()

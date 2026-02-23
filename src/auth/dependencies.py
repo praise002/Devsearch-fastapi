@@ -108,7 +108,7 @@ async def get_current_user(
     user_id = token_details["user"]["user_id"]
 
     user = await user_service.get_user(user_id, session)
-    
+
     if not user:
         raise NotAuthenticated()
 

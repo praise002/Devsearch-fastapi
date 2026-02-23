@@ -2,6 +2,7 @@ from typing import List
 
 from decouple import config
 from fastapi.responses import RedirectResponse
+from sqlalchemy.orm import selectinload
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -24,11 +25,13 @@ from src.errors import UserNotActive
 
 class UserService:
     async def get_user(self, user_id: str, session: AsyncSession):
-        statement = select(User).where(User.id == user_id)
+        statement = (
+            select(User).where(User.id == user_id).options(selectinload(User.profile))
+        )
         result = await session.exec(statement)
         user = result.first()
         return user
-    
+
     async def get_user_by_email(self, email: str, session: AsyncSession):
         statement = select(User).where(User.email == email)
         result = await session.exec(statement)

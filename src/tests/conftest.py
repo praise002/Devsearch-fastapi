@@ -7,16 +7,18 @@ import pytest
 from fakeredis import FakeAsyncRedis
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.orm import selectinload
 from sqlalchemy.pool import NullPool
-from sqlmodel import SQLModel
+from sqlmodel import SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src import app
 from src.auth.schemas import UserCreate
 from src.config import Config
 from src.db.main import get_session
-from src.db.models import Profile, ProfileSkill, Skill
+from src.db.models import Profile, ProfileSkill, Project, Review, Skill, Tag
 from src.profiles.service import ProfileService
+from src.projects.service import ProjectService
 
 
 @pytest.fixture(scope="session")
@@ -461,6 +463,7 @@ async def verified_user(
     await user_service.update_user(user, {"is_email_verified": True}, db_session)
     return user
 
+
 @pytest.fixture
 async def another_verified_user(
     async_client: AsyncClient,
@@ -674,7 +677,9 @@ def mock_cloudinary(monkeypatch):
     """
     Mocks Cloudinary upload and delete operations.
     """
-    upload_result_url = "https://res.cloudinary.com/test/image/upload/v123/test_avatar.jpg"
+    upload_result_url = (
+        "https://res.cloudinary.com/test/image/upload/v123/test_avatar.jpg"
+    )
 
     # Wrap in staticmethod to match the original
     @staticmethod
@@ -697,6 +702,187 @@ def mock_cloudinary(monkeypatch):
     # Set the static methods directly
     monkeypatch.setattr(CloudinaryService, "upload_image", fake_upload_image)
     monkeypatch.setattr(CloudinaryService, "delete_image", fake_delete_image)
-    monkeypatch.setattr(CloudinaryService, "extract_public_id_from_url", fake_extract_public_id)
+    monkeypatch.setattr(
+        CloudinaryService, "extract_public_id_from_url", fake_extract_public_id
+    )
 
     return {"url": upload_result_url, "public_id": "test_avatar"}
+
+
+@pytest.fixture
+async def project_service():
+    """Returns ProjectService instance"""
+    return ProjectService()
+
+
+@pytest.fixture
+async def sample_project(
+    verified_user_with_profile,
+    db_session: AsyncSession,
+):
+    """
+    Creates a sample project owned by verified_user.
+    """
+    profile = verified_user_with_profile["profile"]
+
+    project = Project(
+        title="My Awesome Project",
+        slug="my-awesome-project",
+        description="This is a test project for unit testing",
+        featured_image="https://example.com/image.jpg",
+        source_link="https://github.com/user/project",
+        demo_link="https://project-demo.com",
+        owner_id=profile.id,
+    )
+
+    db_session.add(project)
+    await db_session.commit()
+    await db_session.refresh(project)
+
+    return project
+
+
+@pytest.fixture
+async def another_user_project(
+    another_verified_user_with_profile,
+    db_session: AsyncSession,
+):
+    """
+    Creates a project owned by another_verified_user.
+    """
+    profile = another_verified_user_with_profile["profile"]
+
+    project = Project(
+        title="Another User's Project",
+        slug="another-users-project",
+        description="Project owned by a different user",
+        featured_image="https://example.com/another-image.jpg",
+        owner_id=profile.id,
+    )
+
+    db_session.add(project)
+    await db_session.commit()
+    await db_session.refresh(project)
+
+    return project
+
+
+@pytest.fixture
+async def sample_tags(db_session: AsyncSession, sample_project):
+    """
+    Creates sample tags linked to a project.
+    """
+    tags_data = [
+        {"name": "React", "project_id": sample_project.id},
+        {"name": "TypeScript", "project_id": sample_project.id},
+        {"name": "Node.js", "project_id": sample_project.id},
+    ]
+
+    tags = []
+    for tag_data in tags_data:
+        tag = Tag(**tag_data)
+        db_session.add(tag)
+        tags.append(tag)
+
+    await db_session.commit()
+
+    return tags
+
+
+@pytest.fixture
+async def project_with_tags(sample_project, sample_tags, db_session: AsyncSession):
+    """
+    Returns a project that has tags.
+    """
+    # Refresh to load relationships
+    statement = (
+        select(Project)
+        .options(selectinload(Project.tags))
+        .where(Project.id == sample_project.id)
+    )
+    result = await db_session.exec(statement)
+    project = result.first()
+
+    return project
+
+
+@pytest.fixture
+async def project_with_reviews(
+    sample_project,
+    another_verified_user_with_profile,
+    db_session: AsyncSession,
+):
+    """
+    Creates a project with reviews from other users.
+    """
+    from src.constants import VoteType
+
+    reviewer_profile = another_verified_user_with_profile["profile"]
+
+    review = Review(
+        project_id=sample_project.id,
+        profile_id=reviewer_profile.id,
+        value=VoteType.up,
+        content="Great project! Very helpful.",
+    )
+
+    db_session.add(review)
+    await db_session.commit()
+
+    # Refresh project with reviews
+    statement = (
+        select(Project)
+        .options(selectinload(Project.reviews))
+        .where(Project.id == sample_project.id)
+    )
+    result = await db_session.exec(statement)
+    project = result.first()
+
+    return project
+
+
+@pytest.fixture
+async def multiple_projects(
+    verified_user_with_profile,
+    another_verified_user_with_profile,
+    db_session: AsyncSession,
+):
+    """
+    Creates multiple projects for testing pagination and search.
+    """
+    profile1 = verified_user_with_profile["profile"]
+    profile2 = another_verified_user_with_profile["profile"]
+
+    projects_data = [
+        {
+            "title": "Python Web Scraper",
+            "slug": "python-web-scraper",
+            "description": "A web scraping tool built with Python",
+            "featured_image": "https://example.com/scraper.jpg",
+            "owner_id": profile1.id,
+        },
+        {
+            "title": "React Dashboard",
+            "slug": "react-dashboard",
+            "description": "Modern admin dashboard with React",
+            "featured_image": "https://example.com/dashboard.jpg",
+            "owner_id": profile2.id,
+        },
+        {
+            "title": "Django REST API",
+            "slug": "django-rest-api",
+            "description": "RESTful API using Django framework",
+            "featured_image": "https://example.com/api.jpg",
+            "owner_id": profile1.id,
+        },
+    ]
+
+    projects = []
+    for project_data in projects_data:
+        project = Project(**project_data)
+        db_session.add(project)
+        projects.append(project)
+
+    await db_session.commit()
+
+    return projects

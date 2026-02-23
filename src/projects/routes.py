@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.auth.dependencies import get_current_user
@@ -21,16 +21,18 @@ from src.projects.schema_examples import (
     UPDATE_PROJECT_RESPONSES,
 )
 from src.projects.schemas import (
-    ProjectCreate,
     ProjectListResponse,
+    ProjectListResponseData,
     ProjectOwnerInfo,
     ProjectResponse,
     ProjectResponseData,
     ProjectUpdate,
     ReviewCreate,
     ReviewResponse,
+    ReviewResponseData,
     TagListResponse,
     TagResponse,
+    TagResponseData,
 )
 from src.projects.service import ProjectService
 
@@ -40,13 +42,13 @@ profile_service = ProfileService()
 cloudinary_service = CloudinaryService()
 
 
-def build_project_response(project) -> ProjectResponse:
+def build_project_response(message, project) -> ProjectResponse:
     """
     Convert Project model to ProjectResponse
     """
     return ProjectResponse(
-        status="",
-        message="",
+        status=SUCCESS_EXAMPLE,
+        message=message,
         data=ProjectResponseData(
             id=str(project.id),
             title=project.title,
@@ -66,11 +68,13 @@ def build_project_response(project) -> ProjectResponse:
                 avatar_url=project.owner.avatar_url,
             ),
             tags=[
-                TagResponse(id=str(tag.id), name=tag.name, created_at=tag.created_at)
+                TagResponseData(
+                    id=str(tag.id), name=tag.name, created_at=tag.created_at
+                )
                 for tag in (project.tags or [])
             ],
             reviews=[
-                ReviewResponse(
+                ReviewResponseData(
                     id=str(review.id),
                     value=review.value,
                     content=review.content,
@@ -106,52 +110,99 @@ async def get_projects(
     projects = await project_service.get_all_projects(
         session=session, search=search, limit=limit, offset=offset
     )
-    # return [
-    #     ProjectListResponse(
-    #         status=SUCCESS_EXAMPLE,
-    #         message="Projects retrieved successfully",
-    #         data=ProjectListResponseData(
-    #             id=str(p.id),
-    #             title=p.title,
-    #             slug=p.slug,
-    #             description=p.description,
-    #             featured_image=p.featured_image,
-    #             vote_total=p.vote_total,
-    #             vote_ratio=p.vote_ratio,
-    #             owner=ProjectOwnerInfo(
-    #                 user_id=str(p.owner.user_id),
-    #                 username=p.owner.user.username,
-    #                 full_name=p.owner.user.full_name,
-    #                 avatar_url=p.owner.avatar_url,
-    #             ),
-    #             tags=[
-    #                 TagResponse(id=str(t.id), name=t.name, created_at=t.created_at)
-    #                 for t in (p.tags or [])
-    #             ],
-    #             reviews=[
-    #                 ReviewResponse(
-    #                     id=str(r.id),
-    #                     value=r.value,
-    #                     content=r.content,
-    #                     created_at=r.created_at,
-    #                     reviewer=ProjectOwnerInfo(
-    #                         user_id=str(p.owner.user_id),
-    #                         username=p.owner.user.username,
-    #                         full_name=p.owner.user.full_name,
-    #                         avatar_url=p.owner.avatar_url,
-    #                     ),
-    #                 )
-    #                 for r in (p.reviews or [])
-    #             ],
-    #         ),
-    #     )
-    #     for p in projects
-    # ]
-    return {
-        "status": SUCCESS_EXAMPLE,
-        "message": "Projects retrieved successfully",
-        "data": [p for p in projects],
-    }
+    return ProjectListResponse(
+        status=SUCCESS_EXAMPLE,
+        message="Projects retrieved successfully",
+        data=[
+            ProjectListResponseData(
+                id=str(p.id),
+                title=p.title,
+                slug=p.slug,
+                description=p.description,
+                featured_image=p.featured_image,
+                vote_total=p.vote_total,
+                vote_ratio=p.vote_ratio,
+                owner=ProjectOwnerInfo(
+                    user_id=str(p.owner.user_id),
+                    username=p.owner.user.username,
+                    full_name=p.owner.user.full_name,
+                    avatar_url=p.owner.avatar_url,
+                ),
+                tags=[
+                    TagResponse(id=str(t.id), name=t.name, created_at=t.created_at)
+                    for t in (p.tags or [])
+                ],
+                reviews=[
+                    ReviewResponse(
+                        id=str(r.id),
+                        value=r.value,
+                        content=r.content,
+                        created_at=r.created_at,
+                        reviewer=ProjectOwnerInfo(
+                            user_id=str(p.owner.user_id),
+                            username=p.owner.user.username,
+                            full_name=p.owner.user.full_name,
+                            avatar_url=p.owner.avatar_url,
+                        ),
+                    )
+                    for r in (p.reviews or [])
+                ],
+            )
+            for p in projects
+        ],
+    )
+
+    # return {
+    #     "status": SUCCESS_EXAMPLE,
+    #     "message": "Projects retrieved successfully",
+    #     "data": [p for p in projects],
+    # }
+
+
+# @router.post(
+#     "/",
+#     responses=CREATE_PROJECT_RESPONSES,
+#     response_model=ProjectResponse,
+#     status_code=status.HTTP_201_CREATED,
+# )
+# async def create_project(
+#     project_data: ProjectCreate,
+#     featured_image: UploadFile = File(None, description="Project featured image"),
+#     current_user: User = Depends(get_current_user),
+#     session: AsyncSession = Depends(get_session),
+# ):
+#     """
+#     Create a new project
+#     """
+#     profile = await profile_service.get_profile_by_user_id(
+#         str(current_user.id), session
+#     )
+
+#     featured_image_url = None
+#     if featured_image:
+#         public_id = f"project_{current_user.id}_{featured_image.filename}"
+#         upload_result = await cloudinary_service.upload_image(
+#             file=featured_image,
+#             folder="project_images",
+#             public_id=public_id,
+#         )
+#         featured_image_url = upload_result["url"]
+
+#     project_dict = project_data.model_dump()
+#     if featured_image_url:
+#         project_dict["featured_image"] = featured_image_url
+
+#     new_project = await project_service.create_project(
+#         project_data=project_dict,
+#         owner_id=str(profile.id),
+#         session=session,
+#     )
+
+#     return {
+#         "status": SUCCESS_EXAMPLE,
+#         "message": "Project created successfully",
+#         "data": new_project,
+#     }
 
 
 @router.post(
@@ -161,8 +212,11 @@ async def get_projects(
     status_code=status.HTTP_201_CREATED,
 )
 async def create_project(
-    project_data: ProjectCreate,
-    featured_image: UploadFile = File(None, description="Project featured image"),
+    title: str = Form(),
+    description: str = Form(),
+    source_link: str = Form(None),
+    demo_link: str = Form(None),
+    featured_image: UploadFile = File(description="Project featured image"),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
@@ -177,15 +231,20 @@ async def create_project(
     if featured_image:
         public_id = f"project_{current_user.id}_{featured_image.filename}"
         upload_result = await cloudinary_service.upload_image(
-            file=featured_image,
-            folder="project_images",
-            public_id=public_id,
+            featured_image,
+            "project_images",
+            public_id,
         )
-        featured_image_url = upload_result["url"]
+        featured_image_url = upload_result
 
-    project_dict = project_data.model_dump()
-    if featured_image_url:
-        project_dict["featured_image"] = featured_image_url
+    # Build project dict from form fields
+    project_dict = {
+        "title": title,
+        "description": description,
+        "source_link": source_link,
+        "demo_link": demo_link,
+        "featured_image": featured_image_url,
+    }
 
     new_project = await project_service.create_project(
         project_data=project_dict,
@@ -193,11 +252,9 @@ async def create_project(
         session=session,
     )
 
-    return {
-        "status": SUCCESS_EXAMPLE,
-        "message": "Project created successfully",
-        "data": new_project,
-    }
+    response = build_project_response("Project created successfully", new_project)
+
+    return response
 
 
 @router.get("/{slug}", response_model=ProjectResponse)
@@ -213,11 +270,7 @@ async def get_project(
     if not project:
         raise NotFound(f"Project with slug '{slug}' not found")
 
-    return {
-        "status": SUCCESS_EXAMPLE,
-        "message": "Project retrieved successfully",
-        "data": project,
-    }
+    return build_project_response("Project retrieved successfully", project)
 
 
 @router.patch(
@@ -237,19 +290,22 @@ async def update_project(
     if not project:
         raise NotFound(f"Project with slug '{slug}' not found")
 
-    if str(project.owner_id) != str(current_user.id):
+    if str(project.owner_id) != str(current_user.profile.id):
         raise InsufficientPermission("You can only update your own projects")
 
     update_data = project_data.model_dump(exclude_unset=True)
+
+    # Convert any Pydantic URL types to strings before sending to the service
+    if "demo_link" in update_data and update_data["demo_link"]:
+        update_data["demo_link"] = str(update_data["demo_link"])
+    if "source_link" in update_data and update_data["source_link"]:
+        update_data["source_link"] = str(update_data["source_link"])
+
     updated_project = await project_service.update_project(
         project, update_data, session
     )
 
-    return {
-        "status": SUCCESS_EXAMPLE,
-        "message": "Project updated successfully",
-        "data": updated_project,
-    }
+    return build_project_response("Project updated successfully", updated_project)
 
 
 @router.delete(

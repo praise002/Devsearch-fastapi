@@ -335,7 +335,6 @@ class TestGetMyProfile:
         assert data["skills"] == [] or data["skills"] is None
 
 
-# TODO: FIX
 class TestUpdateMyProfile:
     """Test suite for PATCH /profiles/me endpoint"""
 
@@ -582,7 +581,6 @@ class TestUpdateMyProfile:
         print(response.json())
 
 
-# TODO: FIX
 class TestUploadAvatar:
     """Test suite for POST /profiles/avatar endpoint"""
 
@@ -613,10 +611,10 @@ class TestUploadAvatar:
         from io import BytesIO
 
         fake_image = BytesIO(b"fake image content")
-        fake_image.name = "avatar.jpg"
 
         # Act: Upload avatar
         files = {"file": ("avatar.jpg", fake_image, "image/jpeg")}
+
         response = await async_client.post(
             self.upload_avatar_url,
             files=files,
@@ -748,9 +746,10 @@ class TestUploadAvatar:
             files=files,
             headers={"Authorization": f"Bearer {access_token}"},
         )
+        response_data = response.json()
 
-        # Assert: Should fail validation
-        # Note: Depends on your CloudinaryService validation
+        assert response_data["err_code"] == "image_upload_failed"
+
         print(response.json())
 
     async def test_upload_avatar_missing_file(
@@ -782,7 +781,6 @@ class TestUploadAvatar:
         print(response.json())
 
 
-# TODO: FIX
 class TestDeleteAvatar:
     """Test suite for DELETE /profiles/avatar endpoint"""
 
@@ -1629,7 +1627,6 @@ class TestDeleteSkill:
         print(response_data)
         assert response_data["err_code"] == "unauthorized"
 
-   
 
 # pytest src/tests/test_profiles.py::TestAddSkillToProfile -v -s
 # pytest src/tests/test_profiles.py::TestGetUserSkills -v -s
@@ -1638,4 +1635,4 @@ class TestDeleteSkill:
 # pytest src/tests/test_profiles.py::TestUploadAvatar -v -s
 # pytest src/tests/test_profiles.py::TestDeleteAvatar -v -s
 
-# pytest src/tests/test_profiles.py::TestGetProfiles::test_get_profiles_success -v -s
+# pytest src/tests/test_profiles.py::TestUpdateMyProfile::test_update_profile_success -v -s

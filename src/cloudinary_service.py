@@ -36,6 +36,7 @@ class CloudinaryService:
         if not file.content_type or not file.content_type.startswith("image/"):
             raise InvalidFileContent()
 
+    @staticmethod
     async def upload_image(
         file: UploadFile,
         folder: str = "avatars",

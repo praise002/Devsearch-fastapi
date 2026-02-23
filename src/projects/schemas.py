@@ -34,11 +34,10 @@ class ProjectCreate(BaseModel):
 
 
 class ProjectUpdate(BaseModel):
-    title: str = Field(min_length=1, max_length=255)
-    description: str | None = None
-    featured_image: HttpUrl | None = None
-    source_link: HttpUrl = Field(default=None, max_length=200)
-    demo_link: HttpUrl = Field(default=None, max_length=200)
+    title: str | None = Field(default=None, max_length=255)
+    description: str | None = Field(default=None, max_length=255)
+    source_link: HttpUrl | None = Field(default=None, max_length=200)
+    demo_link: HttpUrl | None = Field(default=None, max_length=200)
 
 
 class ProjectOwnerInfo(BaseModel):
@@ -61,8 +60,8 @@ class ProjectResponseData(BaseModel):
     created_at: datetime
     updated_at: datetime
     owner: ProjectOwnerInfo
-    tags: list[TagResponse] = []
-    reviews: list["ReviewResponse"] = []
+    tags: list[TagResponseData] = []
+    reviews: list["ReviewResponseData"] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -82,7 +81,7 @@ class ProjectListResponseData(BaseModel):
     vote_total: int
     vote_ratio: int
     owner: ProjectOwnerInfo
-    tags: list[TagResponse] = []
+    tags: list[TagResponseData] = []
 
     model_config = ConfigDict(from_attributes=True)
 
